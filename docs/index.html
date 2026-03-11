@@ -1,0 +1,145 @@
+﻿<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Calendario electoral</title>
+    <meta
+      name="description"
+      content="Calcula calendarios electorales de delegación de grupo y de curso, muestra las fechas tras pulsar calcular y descarga el PDF ya cumplimentado."
+    >
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=Manrope:wght@400;500;700;800&display=swap"
+      rel="stylesheet"
+    >
+    <link rel="stylesheet" href="./styles.css">
+    <script type="module" src="./app.js"></script>
+  </head>
+  <body>
+    <main class="page">
+      <header class="panel masthead">
+        <img class="brand-logo" src="./assets/logo-cecadus.svg" alt="CECADUS Comisión Electoral">
+        <div class="masthead-copy">
+          <span class="eyebrow">CECADUS</span>
+          <h1>Calendario electoral</h1>
+          <p class="lede">
+            Calcula el calendario para delegación de grupo o de curso, visualiza las fechas en la
+            web y descarga la plantilla PDF cumplimentada.
+          </p>
+        </div>
+      </header>
+
+      <section class="panel">
+        <div class="section-heading">
+          <span class="section-kicker">Entrada</span>
+          <h2>Datos del proceso</h2>
+        </div>
+
+        <form data-calendar-form novalidate>
+          <div class="field">
+            <label for="calendar-type">Tipo de calendario</label>
+            <select id="calendar-type">
+              <option value="group">Delegación de grupo</option>
+              <option value="course">Delegación de curso</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label for="academic-year">Curso académico</label>
+            <input
+              id="academic-year"
+              name="academic-year"
+              type="text"
+              placeholder="2025-2026"
+              inputmode="numeric"
+              autocomplete="off"
+            >
+          </div>
+
+          <div class="field">
+            <label for="calculation-mode">Criterio de cómputo</label>
+            <select id="calculation-mode">
+              <option value="maximum">Plazos máximos</option>
+              <option value="minimum">Plazos mínimos</option>
+            </select>
+            <small>
+              El criterio se aplica a los tramos abiertos del procedimiento. Los mínimos legales
+              fijos se mantienen completos.
+            </small>
+          </div>
+
+          <div class="field">
+            <label for="convocation-date">Fecha de convocatoria</label>
+            <div class="date-control">
+              <input
+                id="convocation-date"
+                name="convocation-date"
+                type="text"
+                placeholder="dd/mm/aaaa"
+                inputmode="numeric"
+                autocomplete="off"
+              >
+              <button type="button" class="picker-trigger" data-picker-button="convocation">Calendario</button>
+              <input type="date" class="native-picker" data-native-picker="convocation" tabindex="-1" aria-hidden="true">
+            </div>
+          </div>
+
+          <div class="field">
+            <label>Fechas de votación</label>
+            <div class="builder-shell">
+              <div class="builder-actions">
+                <button type="button" class="secondary small" data-add-voting>Añadir fecha de votación</button>
+              </div>
+              <div class="range-list" data-voting-list></div>
+            </div>
+            <small>
+              Puedes introducir entre 1 y 5 jornadas de votación. Se rellenarán juntas en una sola casilla del PDF o en la plantilla ampliada cuando haya varias fechas.
+            </small>
+          </div>
+
+          <div class="field">
+            <label>Días inhábiles adicionales</label>
+            <div class="builder-shell">
+              <div class="builder-actions">
+                <button type="button" class="secondary small" data-add-single>Añadir fecha</button>
+                <button type="button" class="secondary small" data-add-range>Añadir rango</button>
+              </div>
+              <div class="range-list" data-excluded-list></div>
+            </div>
+            <small>
+              Puedes combinar fechas sueltas y varios rangos. Todas se excluyen del cómputo como
+              días inhábiles adicionales.
+            </small>
+          </div>
+
+          <div class="actions">
+            <button class="primary" type="button" data-calculate>Calcular</button>
+            <button class="secondary" type="button" data-download disabled>Descargar PDF relleno</button>
+            <button class="ghost" type="reset">Restablecer</button>
+          </div>
+        </form>
+
+        <div class="message" data-errors hidden></div>
+      </section>
+
+      <section class="panel output-panel">
+        <div class="output-head">
+          <div>
+            <span class="section-kicker">Salida</span>
+            <h2>Calendario calculado</h2>
+          </div>
+          <span class="status-pill" data-status-pill data-state="idle">Sin calcular</span>
+        </div>
+
+        <div class="note" data-assumptions hidden></div>
+        <div class="empty-calendar" data-output-placeholder>Completa los datos y pulsa Calcular.</div>
+        <div class="calendar-display" data-output-body hidden></div>
+      </section>
+    </main>
+  </body>
+</html>
+
+
+

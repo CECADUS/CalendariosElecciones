@@ -25,17 +25,19 @@ La aplicación es completamente estática. Para probarla en local conviene servi
 
 ## Despliegue en GitHub Pages
 
-El repositorio incluye el workflow [`.github/workflows/deploy-pages.yml`](.github/workflows/deploy-pages.yml), que hace lo siguiente al cerrarse una pull request mergeada hacia `main` o `master`:
+El repositorio incluye el workflow [`.github/workflows/deploy-pages.yml`](.github/workflows/deploy-pages.yml), con este comportamiento:
 
-1. Comprueba la sintaxis de `front/app.js`, `front/calculator.js` y `front/pdf-generator.js`.
-2. Empaqueta el contenido de `front/` como artefacto de GitHub Pages.
-3. Publica la web usando GitHub Actions.
+1. En cada pull request hacia `main` o `master`, ejecuta la validación de los scripts del frontend.
+2. Cuando esa pull request se mergea, GitHub genera un `push` sobre `main` o `master`.
+3. Ese `push` vuelve a validar el frontend, empaqueta `front/` y publica la web en GitHub Pages.
+
+Además, `front/.nojekyll` fuerza a GitHub Pages a tratar el contenido como sitio estático puro.
 
 Para activarlo en GitHub:
 
-1. Sube el repositorio con la carpeta `front/` y el workflow.
+1. Sube el repositorio con la carpeta `front/`, el archivo `front/.nojekyll` y el workflow.
 2. En `Settings > Pages`, selecciona `GitHub Actions` como fuente de despliegue.
-3. Trabaja normalmente con pull requests; al hacer merge, la web se volverá a publicar.
+3. Si GitHub sigue intentando construir `docs/` con Jekyll, la configuración antigua de Pages sigue activa y hay que cambiarla manualmente a `GitHub Actions`.
 
 ## Referencias normativas
 
@@ -45,3 +47,4 @@ Para activarlo en GitHub:
 ## Licencia
 
 Este repositorio distribuye el código bajo la licencia indicada en [`LICENSE`](LICENSE).
+

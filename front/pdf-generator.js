@@ -2,7 +2,7 @@
 const PX_TO_PT = 0.75;
 const CELL_INNER_PADDING_PT = 3.5;
 const WHITE = { r: 1, g: 1, b: 1 };
-const ACCENT = "#a00049";
+const ACCENT = "#8D0739";
 const TEXT = "#222222";
 const RAW_PAGE = { width: 1240, height: 1754 };
 let pdfLibLoader = null;

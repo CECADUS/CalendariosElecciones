@@ -1,9 +1,11 @@
-﻿name: Deploy GitHub Pages
+﻿name: CI and Deploy GitHub Pages
 
 on:
   pull_request:
-    types:
-      - closed
+    branches:
+      - main
+      - master
+  push:
     branches:
       - main
       - master
@@ -20,13 +22,10 @@ concurrency:
 
 jobs:
   validate:
-    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.merged == true
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.merge_commit_sha || github.sha }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -40,7 +39,7 @@ jobs:
           node --check front/pdf-generator.js
 
   deploy:
-    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.merged == true
+    if: github.event_name != 'pull_request'
     needs: validate
     runs-on: ubuntu-latest
     environment:
@@ -49,8 +48,6 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.merge_commit_sha || github.sha }}
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5

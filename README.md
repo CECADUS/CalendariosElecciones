@@ -1,18 +1,18 @@
 ﻿# CalendariosElecciones
 
-Aplicación web estática para calcular calendarios electorales de delegación de grupo, de curso y de Consejo de Departamento, mostrar las fechas en pantalla y descargar las plantillas PDF ya rellenadas.
+Aplicación web estática para calcular calendarios electorales de Delegación de Grupo, de Curso y de Consejo de Departamento, mostrar las fechas en pantalla y descargar las plantillas PDF ya rellenadas.
 
 ## Estructura
 
 - `front/`: aplicación web lista para publicarse en GitHub Pages.
-- `front/templates/`: plantillas PDF simples y ampliadas para curso y grupo, además de la plantilla de Consejo de Departamento.
+- `front/templates/`: plantillas PDF simples y ampliadas para Curso y Grupo, además de la plantilla de Consejo de Departamento.
 - `front/assets/`: recursos visuales, incluido el logotipo de CECADUS.
 - `front/fonts/`: tipografías incrustadas para el relleno del PDF.
 - `.github/workflows/deploy-pages.yml`: flujo CI/CD para validación y despliegue.
 
 ## Funcionalidad
 
-- Elección entre calendario de delegación de grupo, de curso y de Consejo de Departamento.
+- Elección entre calendario de Delegación de Grupo, de Curso y de Consejo de Departamento.
 - Cálculo con plazos mínimos o máximos.
 - Soporte para entre 1 y 5 fechas de votación.
 - Autorrelleno de nuevas fechas de votación con la fecha mínima legal y, en jornadas adicionales, con los días hábiles posteriores.

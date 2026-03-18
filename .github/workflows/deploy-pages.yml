@@ -1,10 +1,6 @@
-﻿name: CI and Deploy GitHub Pages
+name: Deploy GitHub Pages
 
 on:
-  pull_request:
-    branches:
-      - main
-      - master
   push:
     branches:
       - main
@@ -21,26 +17,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  validate:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-
-      - name: Validate frontend scripts
-        run: |
-          node --check front/app.js
-          node --check front/calculator.js
-          node --check front/pdf-generator.js
-
   deploy:
-    if: github.event_name != 'pull_request'
-    needs: validate
     runs-on: ubuntu-latest
     environment:
       name: github-pages

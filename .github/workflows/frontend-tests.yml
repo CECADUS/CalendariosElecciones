@@ -1,0 +1,41 @@
+name: Frontend Tests
+
+on:
+  push:
+    branches:
+      - "**"
+  pull_request:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Validate frontend scripts and run all frontend tests
+        run: |
+          node --check front/app.js
+          node --check front/calculator.js
+          node --check front/pdf-generator.js
+          mapfile -t test_files < <(find tests -type f -name "*.test.mjs" | sort)
+          if [ "${#test_files[@]}" -eq 0 ]; then
+            echo "No se han encontrado tests de frontend en tests/"
+            exit 1
+          fi
+          for test_file in "${test_files[@]}"; do
+            echo "Ejecutando $test_file"
+            node --experimental-default-type=module "$test_file"
+          done

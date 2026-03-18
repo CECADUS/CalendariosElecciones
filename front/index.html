@@ -6,7 +6,7 @@
     <title>Calendario electoral</title>
     <meta
       name="description"
-      content="Calcula calendarios electorales de delegación de grupo y de curso, muestra las fechas tras pulsar calcular y descarga el PDF ya cumplimentado."
+      content="Calcula calendarios electorales de delegación de grupo, curso y consejo de departamento, muestra las fechas tras pulsar calcular y descarga el PDF ya cumplimentado."
     >
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -25,8 +25,8 @@
           <span class="eyebrow">CECADUS</span>
           <h1>Calendario electoral</h1>
           <p class="lede">
-            Calcula el calendario para delegación de grupo o de curso, visualiza las fechas en la
-            web y descarga la plantilla PDF cumplimentada.
+            Calcula el calendario para delegación de grupo, de curso o de consejo de departamento,
+            visualiza las fechas en la web y descarga la plantilla PDF cumplimentada.
           </p>
         </div>
       </header>
@@ -41,8 +41,9 @@
           <div class="field">
             <label for="calendar-type">Tipo de calendario</label>
             <select id="calendar-type">
-              <option value="group">Delegación de grupo</option>
-              <option value="course">Delegación de curso</option>
+              <option value="group">Delegación de Grupo</option>
+              <option value="course">Delegación de Curso</option>
+              <option value="department">Elecciones a Consejo de Departamento</option>
             </select>
           </div>
 
@@ -86,7 +87,7 @@
             </div>
           </div>
 
-          <div class="field">
+          <div class="field" data-voting-field>
             <label>Fechas de votación</label>
             <div class="builder-shell">
               <div class="builder-actions">
@@ -94,7 +95,7 @@
               </div>
               <div class="range-list" data-voting-list></div>
             </div>
-            <small>
+            <small data-voting-help>
               Puedes introducir entre 1 y 5 jornadas de votación. Se rellenarán juntas en una sola casilla del PDF o en la plantilla ampliada cuando haya varias fechas.
             </small>
           </div>

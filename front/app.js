@@ -1,12 +1,14 @@
 ﻿import {
+  ACADEMIC_NON_TEACHING_PERIODS,
   CALENDAR_TYPES,
   MAX_VOTING_DATES,
-  addBusinessDays,
   calculateSchedule,
-  formatDateDayMonth,
   formatDateInput,
   formatDateLong,
+  isBusinessDay,
   parseDateInput,
+  parseExcludedDates,
+  suggestNextVotingDate,
   suggestAcademicYear,
 } from "./calculator.js";
 import { downloadFilledPdf } from "./pdf-generator.js";
@@ -29,6 +31,7 @@ const excludedList = document.querySelector("[data-excluded-list]");
 const addVotingButton = document.querySelector("[data-add-voting]");
 const addSingleButton = document.querySelector("[data-add-single]");
 const addRangeButton = document.querySelector("[data-add-range]");
+const votingHelp = document.querySelector("[data-voting-help]");
 
 let currentSchedule = null;
 let hasCalculated = false;
@@ -97,6 +100,32 @@ function createExcludedEntry(kind, start = "", end = "") {
   };
 }
 
+function isDepartmentType() {
+  return typeInput.value === "department";
+}
+
+function getVotingLimit() {
+  return isDepartmentType() ? 1 : MAX_VOTING_DATES;
+}
+
+function syncVotingHelp() {
+  if (!votingHelp) {
+    return;
+  }
+
+  if (isDepartmentType()) {
+    votingHelp.textContent = "Este calendario usa una única jornada de votación.";
+    return;
+  }
+
+  votingHelp.textContent = "Puedes introducir entre 1 y 5 jornadas de votación. Se rellenarán juntas en una sola casilla del PDF o en la plantilla ampliada cuando haya varias fechas.";
+}
+
+function syncDepartmentFields() {
+  syncVotingHelp();
+  syncVotingLimit();
+}
+
 function setStatus(text, state) {
   statusPill.textContent = text;
   statusPill.dataset.state = state;
@@ -121,6 +150,7 @@ function invalidateComputedState() {
   hasCalculated = false;
   currentSchedule = null;
   clearMessages();
+  syncDepartmentFields();
   showOutputPlaceholder(
     dirty
       ? "Has cambiado los datos. Pulsa Calcular para obtener un nuevo calendario."
@@ -131,10 +161,11 @@ function invalidateComputedState() {
 }
 
 function syncVotingLimit() {
-  const limitReached = votingEntries.length >= MAX_VOTING_DATES;
+  const limit = getVotingLimit();
+  const limitReached = votingEntries.length >= limit;
   addVotingButton.disabled = limitReached;
   addVotingButton.textContent = limitReached
-    ? `Máximo ${MAX_VOTING_DATES} votaciones`
+    ? `Máximo ${limit} votación${limit === 1 ? "" : "es"}`
     : "Añadir fecha de votación";
 }
 
@@ -215,9 +246,90 @@ function renderExcludedEntries() {
   }).join("");
 }
 
+function buildExcludedDatesInput() {
+  return excludedEntries.map((entry) => ({
+    kind: entry.kind,
+    start: entry.start,
+    end: entry.end,
+  }));
+}
+
+function resolveAcademicYear(entries = votingEntries) {
+  const typedAcademicYear = academicYearInput.value.trim();
+  if (typedAcademicYear) {
+    return typedAcademicYear;
+  }
+
+  const latestVotingDate = [...entries]
+    .map((entry) => parseDateInput(entry.value))
+    .filter(Boolean)
+    .at(-1);
+  const convocationDate = parseDateInput(convocationInput.value);
+  const fallbackDate = latestVotingDate ?? convocationDate ?? nextBusinessDay(new Date());
+  return suggestAcademicYear(fallbackDate);
+}
+
+function buildDisabledDates(entries = votingEntries) {
+  const excludedDates = parseExcludedDates(buildExcludedDatesInput());
+  const academicYear = resolveAcademicYear(entries);
+  const academicRanges = ACADEMIC_NON_TEACHING_PERIODS[academicYear] ?? [];
+  const academicDates = parseExcludedDates(academicRanges);
+  return new Set([...excludedDates.set, ...academicDates.set]);
+}
+
+function getSuggestedVotingValue(entries = votingEntries) {
+  const suggestion = suggestNextVotingDate({
+    type: typeInput.value,
+    convocationDate: convocationInput.value,
+    electionDatesInput: entries.map((entry) => entry.value),
+    academicYear: academicYearInput.value,
+    calculationMode: calculationModeInput.value,
+    excludedDatesInput: buildExcludedDatesInput(),
+  });
+
+  return suggestion ? formatDateInput(suggestion) : "";
+}
+
+function normalizeVotingEntriesForCurrentType({ enforceBusinessDays = true, forceFirstSuggested = false } = {}) {
+  let changed = false;
+  const limit = getVotingLimit();
+
+  if (votingEntries.length > limit) {
+    votingEntries = votingEntries.slice(0, limit);
+    changed = true;
+  }
+
+  if (votingEntries.length === 0) {
+    votingEntries = [createVotingEntry(getSuggestedVotingValue([]))];
+    return true;
+  }
+
+  const disabledDates = buildDisabledDates(votingEntries);
+  const normalizedEntries = [];
+
+  for (const [index, entry] of votingEntries.entries()) {
+    const suggestedValue = getSuggestedVotingValue(normalizedEntries);
+    const suggestedDate = parseDateInput(suggestedValue);
+    const currentDate = parseDateInput(entry.value);
+    const needsBusinessDayFix = enforceBusinessDays && currentDate && !isBusinessDay(currentDate, disabledDates);
+    const needsMinimumFix = suggestedDate && (!currentDate || currentDate < suggestedDate);
+    const needsModeRealign = forceFirstSuggested && index === 0 && !!suggestedDate;
+    const nextValue = needsBusinessDayFix || needsMinimumFix || needsModeRealign ? suggestedValue : entry.value;
+
+    if (nextValue !== entry.value) {
+      changed = true;
+    }
+
+    normalizedEntries.push({ ...entry, value: nextValue });
+  }
+
+  votingEntries = normalizedEntries;
+
+  return changed;
+}
+
 function seedFormValues() {
   const baseDate = nextBusinessDay(new Date());
-  const firstVotingDate = addBusinessDays(baseDate, 15, new Set());
 
   votingCounter = 0;
   excludedCounter = 0;
@@ -225,9 +337,13 @@ function seedFormValues() {
   calculationModeInput.value = "maximum";
   convocationInput.value = formatDateInput(baseDate);
   convocationNative.value = toIso(convocationInput.value);
-  votingEntries = [createVotingEntry(formatDateInput(firstVotingDate))];
-  academicYearInput.value = suggestAcademicYear(firstVotingDate);
+  academicYearInput.value = suggestAcademicYear(baseDate);
   excludedEntries = [];
+  const firstVotingValue = getSuggestedVotingValue([]);
+  const firstVotingDate = parseDateInput(firstVotingValue);
+  academicYearInput.value = suggestAcademicYear(firstVotingDate ?? baseDate);
+  votingEntries = [createVotingEntry(firstVotingValue)];
+  syncDepartmentFields();
   renderVotingEntries();
   renderExcludedEntries();
 }
@@ -395,11 +511,7 @@ function collectFormState() {
     electionDatesInput: votingEntries.map((entry) => entry.value),
     academicYear: academicYearInput.value,
     calculationMode: calculationModeInput.value,
-    excludedDatesInput: excludedEntries.map((entry) => ({
-      kind: entry.kind,
-      start: entry.start,
-      end: entry.end,
-    })),
+    excludedDatesInput: buildExcludedDatesInput(),
   };
 }
 
@@ -448,23 +560,29 @@ function bindStaticDateControl(textInput, nativeInput, pickerButtonSelector) {
 bindStaticDateControl(convocationInput, convocationNative, '[data-picker-button="convocation"]');
 
 addVotingButton.addEventListener("click", () => {
-  if (votingEntries.length >= MAX_VOTING_DATES) {
+  if (votingEntries.length >= getVotingLimit()) {
     return;
   }
 
-  votingEntries.push(createVotingEntry());
+  votingEntries.push(createVotingEntry(getSuggestedVotingValue()));
   renderVotingEntries();
   invalidateComputedState();
 });
 
 addSingleButton.addEventListener("click", () => {
   excludedEntries.push(createExcludedEntry("single"));
+  if (normalizeVotingEntriesForCurrentType()) {
+    renderVotingEntries();
+  }
   renderExcludedEntries();
   invalidateComputedState();
 });
 
 addRangeButton.addEventListener("click", () => {
   excludedEntries.push(createExcludedEntry("range"));
+  if (normalizeVotingEntriesForCurrentType()) {
+    renderVotingEntries();
+  }
   renderExcludedEntries();
   invalidateComputedState();
 });
@@ -566,6 +684,9 @@ excludedList.addEventListener("blur", (event) => {
   if (entry) {
     entry[input.dataset.entryField] = input.value;
   }
+  if (normalizeVotingEntriesForCurrentType()) {
+    renderVotingEntries();
+  }
   invalidateComputedState();
 }, true);
 
@@ -584,6 +705,9 @@ excludedList.addEventListener("change", (event) => {
     entry[field] = parsed ? formatDateInput(parsed) : "";
     textInput.value = entry[field];
   }
+  if (normalizeVotingEntriesForCurrentType()) {
+    renderVotingEntries();
+  }
   invalidateComputedState();
 });
 
@@ -595,6 +719,9 @@ excludedList.addEventListener("click", (event) => {
 
   if (button.dataset.removeEntry) {
     excludedEntries = excludedEntries.filter((entry) => entry.id !== button.dataset.removeEntry);
+    if (normalizeVotingEntriesForCurrentType()) {
+      renderVotingEntries();
+    }
     renderExcludedEntries();
     invalidateComputedState();
     return;
@@ -608,9 +735,20 @@ excludedList.addEventListener("click", (event) => {
   }
 });
 
-typeInput.addEventListener("change", invalidateComputedState);
+typeInput.addEventListener("change", () => {
+  if (normalizeVotingEntriesForCurrentType()) {
+    renderVotingEntries();
+  }
+  syncDepartmentFields();
+  invalidateComputedState();
+});
 academicYearInput.addEventListener("input", invalidateComputedState);
-calculationModeInput.addEventListener("change", invalidateComputedState);
+calculationModeInput.addEventListener("change", () => {
+  if (normalizeVotingEntriesForCurrentType({ forceFirstSuggested: true })) {
+    renderVotingEntries();
+  }
+  invalidateComputedState();
+});
 calculateButton.addEventListener("click", performCalculation);
 
 downloadButton.addEventListener("click", async () => {
@@ -642,5 +780,6 @@ form.addEventListener("reset", () => {
 });
 
 seedFormValues();
+syncDepartmentFields();
 invalidateComputedState();
 

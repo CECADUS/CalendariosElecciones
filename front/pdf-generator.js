@@ -5,6 +5,11 @@ const WHITE = { r: 1, g: 1, b: 1 };
 const ACCENT = "#8D0739";
 const TEXT = "#222222";
 const RAW_PAGE = { width: 1240, height: 1754 };
+const DOWNLOAD_TYPE_NAMES = {
+  course: "curso",
+  group: "grupo",
+  department: "departamento",
+};
 let pdfLibLoader = null;
 let fontLoader = null;
 const textImageCache = new Map();
@@ -43,6 +48,10 @@ function rawRowCell(top, bottom) {
     x: 118,
     width: 190.293,
   };
+}
+
+function ptCell(x, y, width, height) {
+  return { x, y, width, height };
 }
 
 const TEMPLATE_CONFIG = {
@@ -96,6 +105,31 @@ const TEMPLATE_CONFIG = {
       unitary_act: rawRowCell(726.855, 1125.145),
       results_claim_period: rawRowCell(1125.145, 1285.41),
       final_proclamation: rawRowCell(1285.41, 1445.707),
+    },
+  },
+  department: {
+    templatePath: "./templates/CalendarioDepartamento.pdf",
+    yearBox: null,
+    yearTextOffsetPx: { x: 0, y: 0 },
+    cells: {
+      convocation: ptCell(-23, 633.1, 327.05, 24.6),
+      provisional_census_publication: ptCell(-23, 607.66, 327.05, 24.6),
+      census_publication_period: ptCell(-23, 582.34, 327.05, 24.6),
+      census_claim_period: ptCell(-23, 556.87, 327.05, 24.744),
+      definitive_census_publication: ptCell(-23, 531.55, 327.05, 24.6),
+      candidacy_submission_period: ptCell(-23, 498.78, 327.05, 37.32),
+      provisional_candidatures_publication: ptCell(-23, 475.01, 327.05, 30),
+      candidacy_claim_period: ptCell(-23,  436.24, 327.05, 37.2),
+      candidacy_claims_resolution: ptCell(-23, 411.41, 327.05, 24.624),
+      definitive_candidatures_proclamation: ptCell(-23, 385.97, 327.05, 24.6),
+      campaign_electoral: ptCell(-23, 360.65, 327.05, 24.6),
+      early_voting: ptCell(-23, 335.21, 327.05, 24.6),
+      mesa_appointment: ptCell(-23, 309.89, 327.05, 24.6),
+      interventors_appointment: ptCell(-23, 284.45, 327.05, 24.72),
+      voting_and_scrutiny: ptCell(-23, 259.13, 327.05, 24.6),
+      provisional_elected_proclamation: ptCell(-23, 232.78, 327.05, 24.624),
+      results_claim_period: ptCell(-23, 208.34, 327.05, 24.6),
+      final_elected_proclamation: ptCell(-23, 183.02, 327.05, 24.6),
     },
   },
 };
@@ -494,6 +528,10 @@ async function drawEntryBlocks(pdf, page, blocks, cell, options = {}) {
 }
 
 async function drawAcademicYear(pdf, page, config, academicYear) {
+  if (!config.yearBox) {
+    return;
+  }
+
   const { rgb } = await ensurePdfLib();
   page.drawRectangle({
     x: config.yearBox.x,
@@ -547,6 +585,10 @@ export async function generateFilledPdf(schedule) {
       continue;
     }
 
+    if (event.pdfValue === "" || (Array.isArray(event.pdfValue) && event.pdfValue.length === 0)) {
+      continue;
+    }
+
     if (event.pdfBlocks) {
       await drawEntryBlocks(pdf, page, event.pdfBlocks, cell, {
         primaryFontSizePt: event.kind === "multi-range" ? 9 : 11,
@@ -579,6 +621,11 @@ export async function generateFilledPdf(schedule) {
   return pdf.save();
 }
 
+export function buildDownloadFilename(schedule) {
+  const typeName = DOWNLOAD_TYPE_NAMES[schedule.type] ?? schedule.type;
+  return `calendario-electoral-${typeName}-${schedule.academicYear}.pdf`;
+}
+
 export async function downloadFilledPdf(schedule) {
   const bytes = await generateFilledPdf(schedule);
   const blob = new Blob([bytes], { type: "application/pdf" });
@@ -586,7 +633,7 @@ export async function downloadFilledPdf(schedule) {
   const link = document.createElement("a");
 
   link.href = url;
-  link.download = `calendario-electoral-${schedule.type}-${schedule.academicYear}.pdf`;
+  link.download = buildDownloadFilename(schedule);
   document.body.appendChild(link);
   link.click();
   link.remove();

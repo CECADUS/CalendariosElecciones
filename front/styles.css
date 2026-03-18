@@ -39,6 +39,10 @@ select {
   font: inherit;
 }
 
+[hidden] {
+  display: none !important;
+}
+
 .page {
   width: min(920px, calc(100% - 1rem));
   margin: 0 auto;
@@ -391,13 +395,6 @@ button {
 .note {
   border: 1px solid rgba(216, 175, 53, 0.34);
   background: rgba(216, 175, 53, 0.12);
-}
-
-.message[hidden],
-.note[hidden],
-.calendar-display[hidden],
-.empty-calendar[hidden] {
-  display: none;
 }
 
 .message ul,

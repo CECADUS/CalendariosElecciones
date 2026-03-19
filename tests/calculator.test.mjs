@@ -1,6 +1,8 @@
+process.env.TZ = "Europe/Madrid";
+
 import assert from "node:assert/strict";
 
-import {
+const {
   addBusinessDays,
   calculateSchedule,
   countBusinessDaysInclusive,
@@ -8,10 +10,8 @@ import {
   parseDateInput,
   parseExcludedDates,
   suggestNextVotingDate,
-} from "../front/calculator.js";
-import { buildDownloadFilename } from "../front/pdf-generator.js";
-
-process.env.TZ = "Europe/Madrid";
+} = await import("../front/calculator.js");
+const { buildDownloadFilename } = await import("../front/pdf-generator.js");
 
 function eventById(schedule, id) {
   const event = schedule.events.find((candidate) => candidate.id === id);

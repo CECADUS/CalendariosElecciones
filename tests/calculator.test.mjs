@@ -11,6 +11,8 @@ import {
 } from "../front/calculator.js";
 import { buildDownloadFilename } from "../front/pdf-generator.js";
 
+process.env.TZ = "Europe/Madrid";
+
 function eventById(schedule, id) {
   const event = schedule.events.find((candidate) => candidate.id === id);
   assert.ok(event, `No se ha encontrado el evento ${id}.`);
@@ -140,6 +142,20 @@ runTest("rechaza una votacion sin margen minimo de campana", () => {
 
   assert.equal(schedule.valid, false);
   assert.match(schedule.errors.join(" "), /3 d.as h.biles de campa.a electoral/i);
+});
+
+runTest("limita la campana a 15 dias naturales incluso con cambio horario", () => {
+  const schedule = calculateSchedule({
+    type: "department",
+    convocationDate: "20/02/2026",
+    electionDatesInput: ["01/04/2026"],
+    academicYear: "2025-2026",
+    calculationMode: "minimum",
+    excludedDatesInput: [],
+  });
+
+  assert.equal(schedule.valid, false);
+  assert.match(schedule.errors.join(" "), /no puede superar 15 d.as naturales/i);
 });
 
 runTest("sugiere la fecha minima de votacion para delegacion de curso", () => {

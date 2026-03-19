@@ -27,9 +27,9 @@ jobs:
 
       - name: Validate frontend scripts and run all frontend tests
         run: |
-          node --check front/app.js
-          node --check front/calculator.js
-          node --check front/pdf-generator.js
+          node --experimental-default-type=module --check front/app.js
+          node --experimental-default-type=module --check front/calculator.js
+          node --experimental-default-type=module --check front/pdf-generator.js
           mapfile -t test_files < <(find tests -type f -name "*.test.mjs" | sort)
           if [ "${#test_files[@]}" -eq 0 ]; then
             echo "No se han encontrado tests de frontend en tests/"

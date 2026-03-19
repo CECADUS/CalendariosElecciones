@@ -27,9 +27,23 @@ export const CALCULATION_MODES = {
 export const MAX_VOTING_DATES = 5;
 const DEPARTMENT_VOTING_DATES = 1;
 
-// Empty by default: academic non-teaching periods can be declared here per course
+// Additional academic non-teaching periods can be declared here per course
 // using the same range format accepted by the manual "Días inhábiles adicionales".
 export const ACADEMIC_NON_TEACHING_PERIODS = {};
+
+const DEFAULT_NON_TEACHING_HOLIDAYS = {
+  firstYear: [
+    { month: 10, day: 12 },
+    { month: 11, day: 1 },
+    { month: 12, day: 6 },
+    { month: 12, day: 8 },
+  ],
+  secondYear: [
+    { month: 1, day: 28 },
+    { month: 2, day: 28 },
+    { month: 5, day: 1 },
+  ],
+};
 
 export const UNITARY_ACT_ITEMS = [
   "Presentación de candidaturas",
@@ -178,13 +192,132 @@ function mergeDisabledDateSets(...sets) {
   return merged;
 }
 
+function parseAcademicYear(academicYear) {
+  const normalized = String(academicYear ?? "").trim();
+  const match = /^(\d{4})-(\d{4})$/.exec(normalized);
+  if (!match) {
+    return null;
+  }
+
+  const startYear = Number(match[1]);
+  const endYear = Number(match[2]);
+  if (!Number.isInteger(startYear) || !Number.isInteger(endYear) || endYear <= startYear) {
+    return null;
+  }
+
+  return { startYear, endYear };
+}
+
+function createDateFromDay(year, month, day) {
+  return new Date(year, month - 1, day, 12, 0, 0, 0);
+}
+
+function addHolidayWithSundayTransfer(holidayDate, set) {
+  set.add(isoDate(holidayDate));
+  if (holidayDate.getDay() === 0) {
+    const observed = cloneDate(holidayDate);
+    observed.setDate(observed.getDate() + 1);
+    set.add(isoDate(observed));
+  }
+}
+
+function calculateEasterSunday(year) {
+  // Anonymous Gregorian algorithm.
+  const a = year % 19;
+  const b = Math.floor(year / 100);
+  const c = year % 100;
+  const d = Math.floor(b / 4);
+  const e = b % 4;
+  const f = Math.floor((b + 8) / 25);
+  const g = Math.floor((b - f + 1) / 3);
+  const h = (19 * a + b - d - g + 15) % 30;
+  const i = Math.floor(c / 4);
+  const k = c % 4;
+  const l = (32 + 2 * e + 2 * i - h - k) % 7;
+  const m = Math.floor((a + 11 * h + 22 * l) / 451);
+  const month = Math.floor((h + l - 7 * m + 114) / 31);
+  const day = ((h + l - 7 * m + 114) % 31) + 1;
+  return createDateFromDay(year, month, day);
+}
+
+function addDateRangeToSet(startDate, endDate, set) {
+  const current = cloneDate(startDate);
+  while (current <= endDate) {
+    set.add(isoDate(current));
+    current.setDate(current.getDate() + 1);
+  }
+}
+
+function getHolyWeekRange(easterSunday) {
+  const startDate = cloneDate(easterSunday);
+  startDate.setDate(startDate.getDate() - 6);
+  return {
+    startDate,
+    endDate: cloneDate(easterSunday),
+  };
+}
+
+function getSevilleFairRange(easterSunday) {
+  // Formato corto: martes a domingo de feria (el lunes del pescaíto es lectivo).
+  const mondayPescaito = cloneDate(easterSunday);
+  mondayPescaito.setDate(mondayPescaito.getDate() + 15);
+
+  let fairTuesday = cloneDate(mondayPescaito);
+  fairTuesday.setDate(fairTuesday.getDate() + 1);
+  let fairSunday = cloneDate(mondayPescaito);
+  fairSunday.setDate(fairSunday.getDate() + 6);
+
+  // Ajuste: si la feria (martes-domingo) cae por completo en mayo, se adelanta una semana.
+  if (fairTuesday.getMonth() === 4 && fairSunday.getMonth() === 4) {
+    mondayPescaito.setDate(mondayPescaito.getDate() - 7);
+    fairTuesday = cloneDate(mondayPescaito);
+    fairTuesday.setDate(fairTuesday.getDate() + 1);
+    fairSunday = cloneDate(mondayPescaito);
+    fairSunday.setDate(fairSunday.getDate() + 6);
+  }
+
+  return {
+    startDate: fairTuesday,
+    endDate: fairSunday,
+  };
+}
+
+function getDefaultAcademicHolidaySet(academicYear) {
+  const years = parseAcademicYear(academicYear);
+  if (!years) {
+    return new Set();
+  }
+
+  const holidays = new Set();
+  for (const { month, day } of DEFAULT_NON_TEACHING_HOLIDAYS.firstYear) {
+    addHolidayWithSundayTransfer(createDateFromDay(years.startYear, month, day), holidays);
+  }
+  for (const { month, day } of DEFAULT_NON_TEACHING_HOLIDAYS.secondYear) {
+    addHolidayWithSundayTransfer(createDateFromDay(years.endYear, month, day), holidays);
+  }
+
+  const easterSunday = calculateEasterSunday(years.endYear);
+  const corpusChristi = cloneDate(easterSunday);
+  corpusChristi.setDate(corpusChristi.getDate() + 60);
+  addHolidayWithSundayTransfer(corpusChristi, holidays);
+
+  const holyWeek = getHolyWeekRange(easterSunday);
+  addDateRangeToSet(holyWeek.startDate, holyWeek.endDate, holidays);
+
+  const sevilleFair = getSevilleFairRange(easterSunday);
+  addDateRangeToSet(sevilleFair.startDate, sevilleFair.endDate, holidays);
+
+  return holidays;
+}
+
 function getAcademicNonTeachingDates(academicYear) {
   const configuredRanges = ACADEMIC_NON_TEACHING_PERIODS[academicYear] ?? [];
   const parsed = parseExcludedDates(configuredRanges);
+  const defaultHolidays = getDefaultAcademicHolidaySet(academicYear);
   return {
-    set: parsed.set,
+    set: mergeDisabledDateSets(defaultHolidays, parsed.set),
     invalid: parsed.invalid,
-    supported: configuredRanges.length > 0,
+    supported: defaultHolidays.size > 0 || configuredRanges.length > 0,
   };
 }
 
@@ -634,7 +767,15 @@ function buildAssumptions({
   return assumptions;
 }
 
-function buildCourseSchedule(convocationDate, votingDates, academicYear, extraDisabledDates, calculationMode, duplicatesRemoved) {
+function buildCourseSchedule(
+  convocationDate,
+  votingDates,
+  academicYear,
+  extraDisabledDates,
+  calculationMode,
+  duplicatesRemoved,
+  academicPresetApplied,
+) {
   const resultsClaimEntries = buildResultsClaimEntries(votingDates, extraDisabledDates, calculationMode);
   const finalProclamationEntries = buildFinalProclamationEntries(resultsClaimEntries, extraDisabledDates, calculationMode);
 
@@ -648,6 +789,7 @@ function buildCourseSchedule(convocationDate, votingDates, academicYear, extraDi
       multipleVotingDates: votingDates.length > 1,
       includeManualConvocation: true,
       duplicatesRemoved,
+      academicPresetApplied,
     }),
     events: [
       singleDayEvent(
@@ -664,7 +806,15 @@ function buildCourseSchedule(convocationDate, votingDates, academicYear, extraDi
   };
 }
 
-function buildGroupSchedule(convocationDate, votingDates, academicYear, extraDisabledDates, calculationMode, duplicatesRemoved) {
+function buildGroupSchedule(
+  convocationDate,
+  votingDates,
+  academicYear,
+  extraDisabledDates,
+  calculationMode,
+  duplicatesRemoved,
+  academicPresetApplied,
+) {
   const firstVotingDate = votingDates[0];
   const provisionalCensus = addBusinessDays(convocationDate, 1, extraDisabledDates);
   const censusPublicationEnd = addBusinessDays(provisionalCensus, 4, extraDisabledDates);
@@ -699,6 +849,7 @@ function buildGroupSchedule(convocationDate, votingDates, academicYear, extraDis
       calculationMode,
       multipleVotingDates: votingDates.length > 1,
       duplicatesRemoved,
+      academicPresetApplied,
     }),
     events: [
       singleDayEvent(
@@ -1104,6 +1255,7 @@ export function calculateSchedule({
       disabledDates,
       normalizedCalculationMode,
       votingDates.duplicatesRemoved,
+      academicPresetApplied,
     );
   }
 
@@ -1126,5 +1278,6 @@ export function calculateSchedule({
     disabledDates,
     normalizedCalculationMode,
     votingDates.duplicatesRemoved,
+    academicPresetApplied,
   );
 }

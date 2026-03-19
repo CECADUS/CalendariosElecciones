@@ -334,7 +334,7 @@ function seedFormValues() {
   votingCounter = 0;
   excludedCounter = 0;
   typeInput.value = "group";
-  calculationModeInput.value = "maximum";
+  calculationModeInput.value = "minimum";
   convocationInput.value = formatDateInput(baseDate);
   convocationNative.value = toIso(convocationInput.value);
   academicYearInput.value = suggestAcademicYear(baseDate);

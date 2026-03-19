@@ -293,6 +293,32 @@ runTest("sugiere jornadas posteriores al anadir mas votaciones", () => {
   assert.equal(asInput(suggested), "10/11/2025");
 });
 
+runTest("refleja en las asunciones de curso y grupo los no lectivos precargados", () => {
+  const course = calculateSchedule({
+    type: "course",
+    convocationDate: "03/11/2025",
+    electionDatesInput: ["04/11/2025"],
+    academicYear: "2025-2026",
+    calculationMode: "minimum",
+    excludedDatesInput: [],
+  });
+  const group = calculateSchedule({
+    type: "group",
+    convocationDate: "03/11/2025",
+    electionDatesInput: ["20/11/2025"],
+    academicYear: "2025-2026",
+    calculationMode: "minimum",
+    excludedDatesInput: [],
+  });
+
+  assert.equal(course.valid, true);
+  assert.equal(group.valid, true);
+  assert.ok(course.assumptions.some((line) => line.includes("periodos no lectivos precargados")));
+  assert.ok(group.assumptions.some((line) => line.includes("periodos no lectivos precargados")));
+  assert.ok(!course.assumptions.some((line) => line.includes("deben añadirse manualmente")));
+  assert.ok(!group.assumptions.some((line) => line.includes("deben añadirse manualmente")));
+});
+
 runTest("mantiene el comportamiento existente de delegacion de grupo", () => {
   const schedule = calculateSchedule({
     type: "group",

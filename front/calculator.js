@@ -259,20 +259,20 @@ function getHolyWeekRange(easterSunday) {
 
 function getSevilleFairRange(easterSunday) {
   // Formato corto: martes a domingo de feria (el lunes del pescaíto es lectivo).
-  const mondayPescaíto = cloneDate(easterSunday);
-  mondayPescaíto.setDate(mondayPescaíto.getDate() + 15);
+  const mondayPescaito = cloneDate(easterSunday);
+  mondayPescaito.setDate(mondayPescaito.getDate() + 15);
 
-  let fairTuesday = cloneDate(mondayPescaíto);
+  let fairTuesday = cloneDate(mondayPescaito);
   fairTuesday.setDate(fairTuesday.getDate() + 1);
-  let fairSunday = cloneDate(mondayPescaíto);
+  let fairSunday = cloneDate(mondayPescaito);
   fairSunday.setDate(fairSunday.getDate() + 6);
 
   // Ajuste: si la feria (martes-domingo) cae por completo en mayo, se adelanta una semana.
   if (fairTuesday.getMonth() === 4 && fairSunday.getMonth() === 4) {
-    mondayPescaíto.setDate(mondayPescaíto.getDate() - 7);
-    fairTuesday = cloneDate(mondayPescaíto);
+    mondayPescaito.setDate(mondayPescaito.getDate() - 7);
+    fairTuesday = cloneDate(mondayPescaito);
     fairTuesday.setDate(fairTuesday.getDate() + 1);
-    fairSunday = cloneDate(mondayPescaíto);
+    fairSunday = cloneDate(mondayPescaito);
     fairSunday.setDate(fairSunday.getDate() + 6);
   }
 
@@ -767,7 +767,15 @@ function buildAssumptions({
   return assumptions;
 }
 
-function buildCourseSchedule(convocationDate, votingDates, academicYear, extraDisabledDates, calculationMode, duplicatesRemoved) {
+function buildCourseSchedule(
+  convocationDate,
+  votingDates,
+  academicYear,
+  extraDisabledDates,
+  calculationMode,
+  duplicatesRemoved,
+  academicPresetApplied,
+) {
   const resultsClaimEntries = buildResultsClaimEntries(votingDates, extraDisabledDates, calculationMode);
   const finalProclamationEntries = buildFinalProclamationEntries(resultsClaimEntries, extraDisabledDates, calculationMode);
 
@@ -781,6 +789,7 @@ function buildCourseSchedule(convocationDate, votingDates, academicYear, extraDi
       multipleVotingDates: votingDates.length > 1,
       includeManualConvocation: true,
       duplicatesRemoved,
+      academicPresetApplied,
     }),
     events: [
       singleDayEvent(
@@ -797,7 +806,15 @@ function buildCourseSchedule(convocationDate, votingDates, academicYear, extraDi
   };
 }
 
-function buildGroupSchedule(convocationDate, votingDates, academicYear, extraDisabledDates, calculationMode, duplicatesRemoved) {
+function buildGroupSchedule(
+  convocationDate,
+  votingDates,
+  academicYear,
+  extraDisabledDates,
+  calculationMode,
+  duplicatesRemoved,
+  academicPresetApplied,
+) {
   const firstVotingDate = votingDates[0];
   const provisionalCensus = addBusinessDays(convocationDate, 1, extraDisabledDates);
   const censusPublicationEnd = addBusinessDays(provisionalCensus, 4, extraDisabledDates);
@@ -832,6 +849,7 @@ function buildGroupSchedule(convocationDate, votingDates, academicYear, extraDis
       calculationMode,
       multipleVotingDates: votingDates.length > 1,
       duplicatesRemoved,
+      academicPresetApplied,
     }),
     events: [
       singleDayEvent(
@@ -1237,6 +1255,7 @@ export function calculateSchedule({
       disabledDates,
       normalizedCalculationMode,
       votingDates.duplicatesRemoved,
+      academicPresetApplied,
     );
   }
 
@@ -1259,5 +1278,6 @@ export function calculateSchedule({
     disabledDates,
     normalizedCalculationMode,
     votingDates.duplicatesRemoved,
+    academicPresetApplied,
   );
 }

@@ -249,12 +249,6 @@ export function addBusinessDays(date, amount, extraDisabledDates) {
   return result;
 }
 
-export function addCalendarDays(date, amount) {
-  const result = cloneDate(date);
-  result.setDate(result.getDate() + amount);
-  return result;
-}
-
 export function countBusinessDaysInclusive(startDate, endDate, extraDisabledDates) {
   if (endDate < startDate) {
     return 0;
@@ -272,8 +266,14 @@ export function countBusinessDaysInclusive(startDate, endDate, extraDisabledDate
 }
 
 function countCalendarDaysInclusive(startDate, endDate) {
+  if (endDate < startDate) {
+    return 0;
+  }
+
   const millisecondsPerDay = 24 * 60 * 60 * 1000;
-  return Math.floor((cloneDate(endDate).getTime() - cloneDate(startDate).getTime()) / millisecondsPerDay) + 1;
+  const startUtc = Date.UTC(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
+  const endUtc = Date.UTC(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
+  return Math.floor((endUtc - startUtc) / millisecondsPerDay) + 1;
 }
 
 function getGroupMinimumVotingDate(convocationDate, extraDisabledDates, calculationMode = "minimum") {
@@ -834,7 +834,7 @@ function buildDepartmentSchedule({
   }
 
   if (campaignEnd < definitiveCandidatures) {
-    errors.push("La campaña electoral no puede empezar después de la proclamación definitiva de candidaturas y terminar antes de la votación.");
+    errors.push("No hay margen suficiente entre la proclamación definitiva de candidaturas y la votación para fijar la campaña electoral.");
   } else {
     const campaignBusinessDays = countBusinessDaysInclusive(definitiveCandidatures, campaignEnd, extraDisabledDates);
     const campaignNaturalDays = countCalendarDaysInclusive(definitiveCandidatures, campaignEnd);
@@ -1102,7 +1102,7 @@ export function calculateSchedule({
       votingDates.dates,
       academicYear,
       disabledDates,
-      calculationMode,
+      normalizedCalculationMode,
       votingDates.duplicatesRemoved,
     );
   }
@@ -1113,7 +1113,7 @@ export function calculateSchedule({
       votingDates: votingDates.dates,
       academicYear,
       extraDisabledDates: disabledDates,
-      calculationMode,
+      calculationMode: normalizedCalculationMode,
       duplicatesRemoved: votingDates.duplicatesRemoved,
       academicPresetApplied,
     });
@@ -1124,7 +1124,7 @@ export function calculateSchedule({
     votingDates.dates,
     academicYear,
     disabledDates,
-    calculationMode,
+    normalizedCalculationMode,
     votingDates.duplicatesRemoved,
   );
 }

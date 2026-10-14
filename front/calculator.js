@@ -671,13 +671,14 @@ function unitaryActEvent(dates) {
   };
 }
 
-function buildResultsClaimEntries(votingDates, extraDisabledDates, calculationMode) {
-  const endOffset = calculationMode === "minimum" ? 2 : 3;
-
+function buildResultsClaimEntries(votingDates, extraDisabledDates) {
+  // RGREUS, art. 17.2: tres días hábiles siguientes a la publicación provisional,
+  // que en Grupo y Curso forma parte de la unidad de acto de cada votación.
+  // Este plazo es fijo, independientemente del modo de cálculo.
   return votingDates.map((votingDate) => ({
     anchorDate: votingDate,
     startDate: addBusinessDays(votingDate, 1, extraDisabledDates),
-    endDate: addBusinessDays(votingDate, endOffset, extraDisabledDates),
+    endDate: addBusinessDays(votingDate, 3, extraDisabledDates),
   }));
 }
 
@@ -776,7 +777,7 @@ function buildCourseSchedule(
   duplicatesRemoved,
   academicPresetApplied,
 ) {
-  const resultsClaimEntries = buildResultsClaimEntries(votingDates, extraDisabledDates, calculationMode);
+  const resultsClaimEntries = buildResultsClaimEntries(votingDates, extraDisabledDates);
   const finalProclamationEntries = buildFinalProclamationEntries(resultsClaimEntries, extraDisabledDates, calculationMode);
 
   return {
@@ -825,7 +826,7 @@ function buildGroupSchedule(
     extraDisabledDates,
   );
   const earliestVotingDate = addBusinessDays(definitiveCensus, 1, extraDisabledDates);
-  const resultsClaimEntries = buildResultsClaimEntries(votingDates, extraDisabledDates, calculationMode);
+  const resultsClaimEntries = buildResultsClaimEntries(votingDates, extraDisabledDates);
   const finalProclamationEntries = buildFinalProclamationEntries(resultsClaimEntries, extraDisabledDates, calculationMode);
 
   const errors = [];

@@ -319,6 +319,104 @@ runTest("refleja en las asunciones de curso y grupo los no lectivos precargados"
   assert.ok(!group.assumptions.some((line) => line.includes("deben añadirse manualmente")));
 });
 
+const resultsClaimScenarios = [
+  {
+    name: "una votacion entre semana",
+    votingDates: ["23/11/2026"],
+    excludedDates: [],
+    periods: [["24/11/2026", "26/11/2026"]],
+    finalMinimum: ["27/11/2026"],
+    finalMaximum: ["30/11/2026"],
+  },
+  {
+    name: "una votacion antes del fin de semana",
+    votingDates: ["20/11/2026"],
+    excludedDates: [],
+    periods: [["23/11/2026", "25/11/2026"]],
+    finalMinimum: ["26/11/2026"],
+    finalMaximum: ["27/11/2026"],
+  },
+  {
+    name: "un dia inhabil dentro del plazo",
+    votingDates: ["23/11/2026"],
+    excludedDates: [{ kind: "single", start: "25/11/2026" }],
+    periods: [["24/11/2026", "27/11/2026"]],
+    finalMinimum: ["30/11/2026"],
+    finalMaximum: ["01/12/2026"],
+  },
+  {
+    name: "un rango inhabil al inicio del plazo",
+    votingDates: ["23/11/2026"],
+    excludedDates: [{ kind: "range", start: "24/11/2026", end: "25/11/2026" }],
+    periods: [["26/11/2026", "30/11/2026"]],
+    finalMinimum: ["01/12/2026"],
+    finalMaximum: ["02/12/2026"],
+  },
+  {
+    name: "varias votaciones con plazos independientes",
+    votingDates: ["20/11/2026", "23/11/2026"],
+    excludedDates: [],
+    periods: [["23/11/2026", "25/11/2026"], ["24/11/2026", "26/11/2026"]],
+    finalMinimum: ["26/11/2026", "27/11/2026"],
+    finalMaximum: ["27/11/2026", "30/11/2026"],
+  },
+  {
+    name: "varias votaciones con un rango inhabil",
+    votingDates: ["20/11/2026", "23/11/2026"],
+    excludedDates: [{ kind: "range", start: "24/11/2026", end: "25/11/2026" }],
+    periods: [["23/11/2026", "27/11/2026"], ["26/11/2026", "30/11/2026"]],
+    finalMinimum: ["30/11/2026", "01/12/2026"],
+    finalMaximum: ["01/12/2026", "02/12/2026"],
+  },
+];
+
+for (const type of ["course", "group"]) {
+  for (const calculationMode of ["minimum", "maximum"]) {
+    for (const scenario of resultsClaimScenarios) {
+      runTest(`reclamaciones de ${type} en ${calculationMode}: ${scenario.name}`, () => {
+        const schedule = calculateSchedule({
+          type,
+          convocationDate: "03/11/2026",
+          electionDatesInput: scenario.votingDates,
+          academicYear: "2026-2027",
+          calculationMode,
+          excludedDatesInput: scenario.excludedDates,
+        });
+
+        assert.equal(schedule.valid, true, schedule.errors?.join(" "));
+        const claims = eventById(schedule, "results_claim_period");
+        const final = eventById(schedule, "final_proclamation");
+        const multiple = scenario.votingDates.length > 1;
+        assert.equal(claims.kind, multiple ? "multi-range" : "range");
+        assert.equal(final.kind, multiple ? "multi-single" : "single");
+        const entries = multiple ? claims.entries : [claims];
+        const finalDates = multiple ? final.entries.map((entry) => entry.date) : [final.startDate];
+        const disabledDates = parseExcludedDates(scenario.excludedDates).set;
+
+        assert.deepEqual(
+          entries.map((entry) => [asInput(entry.startDate), asInput(entry.endDate)]),
+          scenario.periods,
+        );
+        for (const [index, entry] of entries.entries()) {
+          assert.equal(countBusinessDaysInclusive(entry.startDate, entry.endDate, disabledDates), 3);
+          assert.ok(entry.startDate > parseDateInput(scenario.votingDates[index]));
+          const [start, end] = scenario.periods[index];
+          assert.equal(entry.pdfValue, `${start.slice(0, -4)}${start.slice(-2)} al ${end.slice(0, -4)}${end.slice(-2)}`);
+          if (multiple) {
+            assert.equal(asInput(entry.anchorDate), scenario.votingDates[index]);
+            assert.equal(asInput(final.entries[index].anchorDate), scenario.votingDates[index]);
+            assert.equal(claims.pdfBlocks[index].primary, entry.pdfValue);
+          }
+        }
+        assert.deepEqual(
+          finalDates.map(asInput),
+          calculationMode === "minimum" ? scenario.finalMinimum : scenario.finalMaximum,
+        );
+      });
+    }
+  }
+}
+
 runTest("mantiene el comportamiento existente de delegacion de grupo", () => {
   const schedule = calculateSchedule({
     type: "group",

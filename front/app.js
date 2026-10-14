@@ -535,7 +535,17 @@ function performCalculation() {
   downloadButton.disabled = false;
 }
 
-function bindStaticDateControl(textInput, nativeInput, pickerButtonSelector) {
+function refreshMinimumVotingDate() {
+  if (calculationModeInput.value !== "minimum" || !parseDateInput(convocationInput.value)) {
+    return;
+  }
+
+  if (normalizeVotingEntriesForCurrentType({ forceFirstSuggested: true })) {
+    renderVotingEntries();
+  }
+}
+
+function bindStaticDateControl(textInput, nativeInput, pickerButtonSelector, onDateChange) {
   const pickerButton = document.querySelector(pickerButtonSelector);
 
   textInput.addEventListener("input", () => {
@@ -548,16 +558,25 @@ function bindStaticDateControl(textInput, nativeInput, pickerButtonSelector) {
     invalidateComputedState();
   });
 
+  // Only a committed change refreshes the suggestion; focusing and blurring the
+  // same date must preserve any voting date the user has chosen manually.
+  textInput.addEventListener("change", () => {
+    syncTextAndNative(textInput, nativeInput, true);
+    onDateChange();
+    invalidateComputedState();
+  });
+
   nativeInput.addEventListener("change", () => {
     const parsed = parseDateInput(nativeInput.value);
     textInput.value = parsed ? formatDateInput(parsed) : "";
+    onDateChange();
     invalidateComputedState();
   });
 
   pickerButton.addEventListener("click", () => openPicker(nativeInput));
 }
 
-bindStaticDateControl(convocationInput, convocationNative, '[data-picker-button="convocation"]');
+bindStaticDateControl(convocationInput, convocationNative, '[data-picker-button="convocation"]', refreshMinimumVotingDate);
 
 addVotingButton.addEventListener("click", () => {
   if (votingEntries.length >= getVotingLimit()) {
@@ -736,7 +755,7 @@ excludedList.addEventListener("click", (event) => {
 });
 
 typeInput.addEventListener("change", () => {
-  if (normalizeVotingEntriesForCurrentType()) {
+  if (normalizeVotingEntriesForCurrentType({ forceFirstSuggested: calculationModeInput.value === "minimum" })) {
     renderVotingEntries();
   }
   syncDepartmentFields();

@@ -27,23 +27,8 @@ export const CALCULATION_MODES = {
 export const MAX_VOTING_DATES = 5;
 const DEPARTMENT_VOTING_DATES = 1;
 
-// Additional academic non-teaching periods can be declared here per course
-// using the same range format accepted by the manual "Días inhábiles adicionales".
-export const ACADEMIC_NON_TEACHING_PERIODS = {};
-
-const DEFAULT_NON_TEACHING_HOLIDAYS = {
-  firstYear: [
-    { month: 10, day: 12 },
-    { month: 11, day: 1 },
-    { month: 12, day: 6 },
-    { month: 12, day: 8 },
-  ],
-  secondYear: [
-    { month: 1, day: 28 },
-    { month: 2, day: 28 },
-    { month: 5, day: 1 },
-  ],
-};
+import academicCalendars from "./academic-calendars.json" with { type: "json" };
+export { academicCalendars };
 
 export const UNITARY_ACT_ITEMS = [
   "Presentación de candidaturas",
@@ -182,143 +167,29 @@ export function parseExcludedDates(rawValue) {
   return { set, invalid };
 }
 
-function mergeDisabledDateSets(...sets) {
-  const merged = new Set();
-  for (const set of sets) {
-    for (const date of set ?? []) {
-      merged.add(date);
-    }
-  }
-  return merged;
+const holidays = new Set();
+const vacations = new Set();
+const exams = new Set();
+for (const calendar of Object.values(academicCalendars)) {
+  for (const date of calendar.holidays) holidays.add(date);
+  for (const [start, end] of calendar.vacations) expandDateRange(parseDateInput(start), parseDateInput(end), vacations);
+  for (const [start, end] of calendar.exams) expandDateRange(parseDateInput(start), parseDateInput(end), exams);
 }
 
-function parseAcademicYear(academicYear) {
-  const normalized = String(academicYear ?? "").trim();
-  const match = /^(\d{4})-(\d{4})$/.exec(normalized);
-  if (!match) {
-    return null;
-  }
-
-  const startYear = Number(match[1]);
-  const endYear = Number(match[2]);
-  if (!Number.isInteger(startYear) || !Number.isInteger(endYear) || endYear <= startYear) {
-    return null;
-  }
-
-  return { startYear, endYear };
+export function getCalendarDays(excludedDatesInput = []) {
+  const { set, invalid } = parseExcludedDates(excludedDatesInput);
+  const administrative = new Set([...holidays, ...vacations, ...set]);
+  return { administrative, electoral: new Set([...administrative, ...exams]), invalid };
 }
 
-function createDateFromDay(year, month, day) {
-  return new Date(year, month - 1, day, 12, 0, 0, 0);
-}
-
-function addHolidayWithSundayTransfer(holidayDate, set) {
-  set.add(isoDate(holidayDate));
-  if (holidayDate.getDay() === 0) {
-    const observed = cloneDate(holidayDate);
-    observed.setDate(observed.getDate() + 1);
-    set.add(isoDate(observed));
+function missingAcademicYear(start, end) {
+  const first = Number(suggestAcademicYear(start).slice(0, 4));
+  const last = Number(suggestAcademicYear(end).slice(0, 4));
+  for (let year = first; year <= last; year++) {
+    const key = `${year}-${year + 1}`;
+    if (!academicCalendars[key]) return key;
   }
-}
-
-function calculateEasterSunday(year) {
-  // Anonymous Gregorian algorithm.
-  const a = year % 19;
-  const b = Math.floor(year / 100);
-  const c = year % 100;
-  const d = Math.floor(b / 4);
-  const e = b % 4;
-  const f = Math.floor((b + 8) / 25);
-  const g = Math.floor((b - f + 1) / 3);
-  const h = (19 * a + b - d - g + 15) % 30;
-  const i = Math.floor(c / 4);
-  const k = c % 4;
-  const l = (32 + 2 * e + 2 * i - h - k) % 7;
-  const m = Math.floor((a + 11 * h + 22 * l) / 451);
-  const month = Math.floor((h + l - 7 * m + 114) / 31);
-  const day = ((h + l - 7 * m + 114) % 31) + 1;
-  return createDateFromDay(year, month, day);
-}
-
-function addDateRangeToSet(startDate, endDate, set) {
-  const current = cloneDate(startDate);
-  while (current <= endDate) {
-    set.add(isoDate(current));
-    current.setDate(current.getDate() + 1);
-  }
-}
-
-function getHolyWeekRange(easterSunday) {
-  const startDate = cloneDate(easterSunday);
-  startDate.setDate(startDate.getDate() - 6);
-  return {
-    startDate,
-    endDate: cloneDate(easterSunday),
-  };
-}
-
-function getSevilleFairRange(easterSunday) {
-  // Formato corto: martes a domingo de feria (el lunes del pescaíto es lectivo).
-  const mondayPescaito = cloneDate(easterSunday);
-  mondayPescaito.setDate(mondayPescaito.getDate() + 15);
-
-  let fairTuesday = cloneDate(mondayPescaito);
-  fairTuesday.setDate(fairTuesday.getDate() + 1);
-  let fairSunday = cloneDate(mondayPescaito);
-  fairSunday.setDate(fairSunday.getDate() + 6);
-
-  // Ajuste: si la feria (martes-domingo) cae por completo en mayo, se adelanta una semana.
-  if (fairTuesday.getMonth() === 4 && fairSunday.getMonth() === 4) {
-    mondayPescaito.setDate(mondayPescaito.getDate() - 7);
-    fairTuesday = cloneDate(mondayPescaito);
-    fairTuesday.setDate(fairTuesday.getDate() + 1);
-    fairSunday = cloneDate(mondayPescaito);
-    fairSunday.setDate(fairSunday.getDate() + 6);
-  }
-
-  return {
-    startDate: fairTuesday,
-    endDate: fairSunday,
-  };
-}
-
-function getDefaultAcademicHolidaySet(academicYear) {
-  const years = parseAcademicYear(academicYear);
-  if (!years) {
-    return new Set();
-  }
-
-  const holidays = new Set();
-  for (const { month, day } of DEFAULT_NON_TEACHING_HOLIDAYS.firstYear) {
-    addHolidayWithSundayTransfer(createDateFromDay(years.startYear, month, day), holidays);
-  }
-  for (const { month, day } of DEFAULT_NON_TEACHING_HOLIDAYS.secondYear) {
-    addHolidayWithSundayTransfer(createDateFromDay(years.endYear, month, day), holidays);
-  }
-
-  const easterSunday = calculateEasterSunday(years.endYear);
-  const corpusChristi = cloneDate(easterSunday);
-  corpusChristi.setDate(corpusChristi.getDate() + 60);
-  addHolidayWithSundayTransfer(corpusChristi, holidays);
-
-  const holyWeek = getHolyWeekRange(easterSunday);
-  addDateRangeToSet(holyWeek.startDate, holyWeek.endDate, holidays);
-
-  const sevilleFair = getSevilleFairRange(easterSunday);
-  addDateRangeToSet(sevilleFair.startDate, sevilleFair.endDate, holidays);
-
-  return holidays;
-}
-
-function getAcademicNonTeachingDates(academicYear) {
-  const configuredRanges = ACADEMIC_NON_TEACHING_PERIODS[academicYear] ?? [];
-  const parsed = parseExcludedDates(configuredRanges);
-  const defaultHolidays = getDefaultAcademicHolidaySet(academicYear);
-  return {
-    set: mergeDisabledDateSets(defaultHolidays, parsed.set),
-    invalid: parsed.invalid,
-    supported: defaultHolidays.size > 0 || configuredRanges.length > 0,
-  };
+  return null;
 }
 
 function orderAndDeduplicateDates(dates) {
@@ -398,96 +269,78 @@ export function countBusinessDaysInclusive(startDate, endDate, extraDisabledDate
   return total;
 }
 
-function countCalendarDaysInclusive(startDate, endDate) {
-  if (endDate < startDate) {
-    return 0;
+function nextBusinessDayOnOrAfter(date, disabled) {
+  return isBusinessDay(date, disabled) ? cloneDate(date) : addBusinessDays(date, 1, disabled);
+}
+
+function censusDeadlines(convocation, days, mode) {
+  const provisionalCensus = addBusinessDays(convocation, 1, days.administrative);
+  const censusClaimStart = nextBusinessDayOnOrAfter(provisionalCensus, days.electoral);
+  // La publicación puede adelantarse a los cinco días efectivos de exposición con derecho a reclamar.
+  const censusPublicationEnd = addBusinessDays(censusClaimStart, 4, days.electoral);
+  const censusClaimEnd = addBusinessDays(censusPublicationEnd, 3, days.electoral);
+  const definitiveCensus = addBusinessDays(censusClaimEnd, mode === "minimum" ? 1 : 3, days.administrative);
+  return { provisionalCensus, censusClaimStart, censusPublicationEnd, censusClaimEnd, definitiveCensus };
+}
+
+function dayAfter(date) {
+  const next = cloneDate(date);
+  next.setDate(next.getDate() + 1);
+  return next;
+}
+
+function campaignWindow(proclamation, electoral) {
+  let start = nextBusinessDayOnOrAfter(proclamation, electoral);
+  while (true) {
+    let minimumEnd = null;
+    let maximumEnd = start;
+    let eligible = 0;
+    let date = start;
+    for (let elapsed = 0; elapsed < 15; elapsed++, date = dayAfter(date)) {
+      const key = isoDate(date);
+      if (vacations.has(key) || exams.has(key)) break;
+      if (isBusinessDay(date, electoral)) {
+        maximumEnd = date;
+        if (++eligible === 3) minimumEnd = date;
+      }
+    }
+    if (minimumEnd) return { start, minimumEnd, maximumEnd };
+    // Tras una interrupción oficial, buscar un tramo completo al reabrir.
+    const interrupted = vacations.has(isoDate(date)) || exams.has(isoDate(date));
+    start = nextBusinessDayOnOrAfter(interrupted ? date : dayAfter(start), electoral);
   }
-
-  const millisecondsPerDay = 24 * 60 * 60 * 1000;
-  const startUtc = Date.UTC(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
-  const endUtc = Date.UTC(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
-  return Math.floor((endUtc - startUtc) / millisecondsPerDay) + 1;
 }
 
-function getGroupMinimumVotingDate(convocationDate, extraDisabledDates, calculationMode = "minimum") {
-  const provisionalCensus = addBusinessDays(convocationDate, 1, extraDisabledDates);
-  const censusPublicationEnd = addBusinessDays(provisionalCensus, 4, extraDisabledDates);
-  const censusClaimEnd = addBusinessDays(censusPublicationEnd, 3, extraDisabledDates);
-  const definitiveCensus = addBusinessDays(
-    censusClaimEnd,
-    calculationMode === "minimum" ? 1 : 3,
-    extraDisabledDates,
-  );
-  return addBusinessDays(definitiveCensus, 1, extraDisabledDates);
+function departmentDeadlines(census, days, mode) {
+  const minimum = mode === "minimum";
+  const candidacySubmissionStart = nextBusinessDayOnOrAfter(census.definitiveCensus, days.electoral);
+  const candidacySubmissionEnd = addBusinessDays(candidacySubmissionStart, minimum ? 2 : 6, days.electoral);
+  const provisionalCandidatures = addBusinessDays(candidacySubmissionEnd, minimum ? 1 : 3, days.administrative);
+  const candidacyClaimStart = nextBusinessDayOnOrAfter(provisionalCandidatures, days.electoral);
+  const candidacyClaimEnd = addBusinessDays(candidacyClaimStart, minimum ? 2 : 6, days.electoral);
+  const candidacyClaimsResolution = addBusinessDays(candidacyClaimEnd, minimum ? 1 : 2, days.administrative);
+  const definitiveCandidatures = addBusinessDays(candidacyClaimsResolution, minimum ? 1 : 3, days.administrative);
+  const campaign = campaignWindow(definitiveCandidatures, days.electoral);
+  return { candidacySubmissionStart, candidacySubmissionEnd, provisionalCandidatures, candidacyClaimStart,
+    candidacyClaimEnd, candidacyClaimsResolution, definitiveCandidatures, campaign };
 }
 
-function getDepartmentMinimumVotingDate(convocationDate, extraDisabledDates, calculationMode = "minimum") {
-  const provisionalCensus = addBusinessDays(convocationDate, 1, extraDisabledDates);
-  const censusPublicationEnd = addBusinessDays(provisionalCensus, 4, extraDisabledDates);
-  const censusClaimEnd = addBusinessDays(censusPublicationEnd, 3, extraDisabledDates);
-  const definitiveCensus = addBusinessDays(
-    censusClaimEnd,
-    calculationMode === "minimum" ? 1 : 3,
-    extraDisabledDates,
-  );
-  const candidacySubmissionEnd = addBusinessDays(
-    definitiveCensus,
-    calculationMode === "minimum" ? 2 : 6,
-    extraDisabledDates,
-  );
-  const provisionalCandidatures = addBusinessDays(
-    candidacySubmissionEnd,
-    calculationMode === "minimum" ? 1 : 3,
-    extraDisabledDates,
-  );
-  const candidacyClaimEnd = addBusinessDays(
-    provisionalCandidatures,
-    calculationMode === "minimum" ? 2 : 6,
-    extraDisabledDates,
-  );
-  const candidacyClaimsResolution = addBusinessDays(
-    candidacyClaimEnd,
-    calculationMode === "minimum" ? 1 : 2,
-    extraDisabledDates,
-  );
-  const definitiveCandidatures = addBusinessDays(
-    candidacyClaimsResolution,
-    calculationMode === "minimum" ? 1 : 3,
-    extraDisabledDates,
-  );
-  return addBusinessDays(definitiveCandidatures, 5, extraDisabledDates);
+function prepareElection(type, convocation, days, mode) {
+  if (type === "course") return { firstVote: addBusinessDays(convocation, 1, days.electoral) };
+  const census = censusDeadlines(convocation, days, mode);
+  if (type === "group") return { ...census, firstVote: addBusinessDays(census.definitiveCensus, 1, days.electoral) };
+  const department = departmentDeadlines(census, days, mode);
+  const afterAppointments = addBusinessDays(department.definitiveCandidatures, 5, days.electoral);
+  const afterCampaign = addBusinessDays(department.campaign.minimumEnd, 1, days.electoral);
+  const firstVote = afterCampaign > afterAppointments ? afterCampaign : afterAppointments;
+  return { ...census, ...department, firstVote };
 }
 
-function getMinimumVotingDateForType(type, convocationDate, extraDisabledDates, calculationMode = "minimum") {
-  if (type === "group") {
-    return getGroupMinimumVotingDate(convocationDate, extraDisabledDates, calculationMode);
-  }
-
-  if (type === "department") {
-    return getDepartmentMinimumVotingDate(convocationDate, extraDisabledDates, calculationMode);
-  }
-
-  return addBusinessDays(convocationDate, 1, extraDisabledDates);
-}
-
-function nextBusinessDayOnOrAfter(date, extraDisabledDates) {
-  const candidate = cloneDate(date);
-  while (!isBusinessDay(candidate, extraDisabledDates)) {
-    candidate.setDate(candidate.getDate() + 1);
-  }
-  return candidate;
-}
-
-function getFirstValidVotingDate({
-  type,
-  convocationDate,
-  requestedDate = null,
-  extraDisabledDates,
-  calculationMode = "minimum",
-}) {
-  const minimumDate = getMinimumVotingDateForType(type, convocationDate, extraDisabledDates, calculationMode);
-  const candidate = requestedDate && requestedDate > minimumDate ? requestedDate : minimumDate;
-  return nextBusinessDayOnOrAfter(candidate, extraDisabledDates);
+function resultDeadlines(type, votingDate, days, mode) {
+  const provisional = type === "department" ? addBusinessDays(votingDate, 1, days.administrative) : votingDate;
+  const start = addBusinessDays(provisional, 1, days.electoral);
+  const end = addBusinessDays(provisional, 3, days.electoral);
+  return { provisional, start, end, final: addBusinessDays(end, mode === "minimum" ? 1 : 2, days.administrative) };
 }
 
 function formatFirstValidVotingDateMessage(date) {
@@ -495,38 +348,17 @@ function formatFirstValidVotingDateMessage(date) {
 }
 
 export function suggestNextVotingDate({
-  type,
-  convocationDate: convocationInput,
-  electionDatesInput = [],
-  academicYear: academicYearInput,
-  calculationMode = "minimum",
-  excludedDatesInput = [],
+  type, convocationDate: input, electionDatesInput = [], calculationMode = "minimum", excludedDatesInput = [],
 }) {
-  if (!CALENDAR_TYPES[type]) {
-    return null;
-  }
-
-  const convocationDate = parseDateInput(convocationInput);
-  if (!convocationDate) {
-    return null;
-  }
-
-  const votingDates = parseVotingDates(electionDatesInput);
-  const anchorDate = votingDates.dates.at(-1) ?? convocationDate;
-  const academicYear = academicYearInput?.trim() || suggestAcademicYear(anchorDate);
-  const academicNonTeachingDates = getAcademicNonTeachingDates(academicYear);
-  const excludedDates = parseExcludedDates(excludedDatesInput);
-  const disabledDates = mergeDisabledDateSets(excludedDates.set, academicNonTeachingDates.set);
-  const normalizedCalculationMode = CALCULATION_MODES[calculationMode] ? calculationMode : "minimum";
-  const minimumDate = getMinimumVotingDateForType(type, convocationDate, disabledDates, normalizedCalculationMode);
-
-  if (votingDates.dates.length === 0) {
-    return minimumDate;
-  }
-
-  const latestVotingDate = votingDates.dates.at(-1);
-  const nextDate = addBusinessDays(latestVotingDate, 1, disabledDates);
-  return nextDate < minimumDate ? minimumDate : nextDate;
+  const convocation = parseDateInput(input);
+  if (!convocation || !CALENDAR_TYPES[type] || !academicCalendars[suggestAcademicYear(convocation)]) return null;
+  const days = getCalendarDays(excludedDatesInput);
+  if (days.invalid.length || !isBusinessDay(convocation, days.electoral)) return null;
+  const { firstVote } = prepareElection(type, convocation, days, calculationMode);
+  const last = parseVotingDates(electionDatesInput).dates.at(-1);
+  const vote = last && last >= firstVote ? addBusinessDays(last, 1, days.electoral) : firstVote;
+  const { final } = resultDeadlines(type, vote, days, calculationMode);
+  return missingAcademicYear(convocation, final) ? null : vote;
 }
 
 export function formatDateLong(date) {
@@ -671,26 +503,6 @@ function unitaryActEvent(dates) {
   };
 }
 
-function buildResultsClaimEntries(votingDates, extraDisabledDates) {
-  // RGREUS, art. 17.2: tres días hábiles siguientes a la publicación provisional,
-  // que en Grupo y Curso forma parte de la unidad de acto de cada votación.
-  // Este plazo es fijo, independientemente del modo de cálculo.
-  return votingDates.map((votingDate) => ({
-    anchorDate: votingDate,
-    startDate: addBusinessDays(votingDate, 1, extraDisabledDates),
-    endDate: addBusinessDays(votingDate, 3, extraDisabledDates),
-  }));
-}
-
-function buildFinalProclamationEntries(resultsClaimEntries, extraDisabledDates, calculationMode) {
-  const resolutionOffset = calculationMode === "minimum" ? 1 : 2;
-
-  return resultsClaimEntries.map((entry) => ({
-    anchorDate: entry.anchorDate,
-    date: addBusinessDays(entry.endDate, resolutionOffset, extraDisabledDates),
-  }));
-}
-
 function buildResultsClaimEvent(entries) {
   if (entries.length === 1) {
     return rangeEvent(
@@ -732,54 +544,29 @@ function buildFinalProclamationEvent(entries) {
   );
 }
 
-function buildAssumptions({
-  calculationMode,
-  multipleVotingDates = false,
-  includeManualConvocation = false,
-  duplicatesRemoved = false,
-  academicPresetApplied = false,
-}) {
+function buildAssumptions({ calculationMode, multipleVotingDates = false, duplicatesRemoved = false }) {
   const assumptions = [
-    calculationMode === "minimum"
-      ? "Se ha aplicado el criterio de plazos mínimos en los tramos abiertos del procedimiento."
-      : "Se ha aplicado el criterio de plazos máximos en los tramos abiertos del procedimiento.",
-    academicPresetApplied
-      ? "Los días inhábiles excluyen sábados, domingos, los periodos no lectivos precargados para el curso académico y cualquier fecha o rango adicional marcado en la interfaz."
-      : "Los días inhábiles excluyen sábados, domingos y cualquier fecha o rango adicional marcado en la interfaz.",
+    calculationMode === "minimum" ? "Se aplican los plazos mínimos." : "Se aplican los plazos máximos.",
+    "Se aplican los periodos no lectivos precargados del calendario general de grado, los festivos, los fines de semana y los inhábiles adicionales.",
+    "Durante los exámenes de primera y segunda convocatoria solo se programan publicaciones y resoluciones de reclamaciones. Los plazos de participación cuentan días hábiles electorales.",
   ];
-
-  if (includeManualConvocation) {
-    assumptions.unshift("La convocatoria se introduce manualmente para adaptarla al calendario concreto del centro.");
-  }
-
-  if (!academicPresetApplied) {
-    assumptions.push("Si el curso académico no tiene cargados sus periodos no lectivos en la aplicación, deben añadirse manualmente en Días inhábiles adicionales para reflejar Navidad, Semana Santa, Feria y verano.");
-  }
-
-  if (multipleVotingDates) {
-    assumptions.push("La unidad de acto se mantiene en un único bloque y, si hay varias votaciones, el PDF reparte sus fechas dentro de la misma casilla.");
-    assumptions.push("Cada jornada de votación genera su propio plazo de reclamación de resultados y su propia proclamación definitiva.");
-  }
-
-  if (duplicatesRemoved) {
-    assumptions.push("Las fechas de votación repetidas se han fusionado para evitar duplicidades en el calendario.");
-  }
-
+  if (multipleVotingDates) assumptions.push("Cada votación tiene su propio plazo de reclamación y proclamación definitiva.");
+  if (duplicatesRemoved) assumptions.push("Se han unificado las fechas de votación repetidas.");
   return assumptions;
 }
 
-function buildCourseSchedule(
-  convocationDate,
-  votingDates,
-  academicYear,
-  extraDisabledDates,
-  calculationMode,
-  duplicatesRemoved,
-  academicPresetApplied,
-) {
-  const resultsClaimEntries = buildResultsClaimEntries(votingDates, extraDisabledDates);
-  const finalProclamationEntries = buildFinalProclamationEntries(resultsClaimEntries, extraDisabledDates, calculationMode);
+function studentElectionResults(type, votingDates, days, mode) {
+  const claims = [];
+  const proclamations = [];
+  for (const anchorDate of votingDates) {
+    const { start, end, final } = resultDeadlines(type, anchorDate, days, mode);
+    claims.push({ anchorDate, startDate: start, endDate: end });
+    proclamations.push({ anchorDate, date: final });
+  }
+  return [buildResultsClaimEvent(claims), buildFinalProclamationEvent(proclamations)];
+}
 
+function buildCourseSchedule({ convocationDate, votingDates, academicYear, days, calculationMode, duplicatesRemoved }) {
   return {
     valid: true,
     type: "course",
@@ -788,9 +575,7 @@ function buildCourseSchedule(
     assumptions: buildAssumptions({
       calculationMode,
       multipleVotingDates: votingDates.length > 1,
-      includeManualConvocation: true,
       duplicatesRemoved,
-      academicPresetApplied,
     }),
     events: [
       singleDayEvent(
@@ -801,46 +586,13 @@ function buildCourseSchedule(
         "Preparación",
       ),
       unitaryActEvent(votingDates),
-      buildResultsClaimEvent(resultsClaimEntries),
-      buildFinalProclamationEvent(finalProclamationEntries),
+      ...studentElectionResults("course", votingDates, days, calculationMode),
     ],
   };
 }
 
-function buildGroupSchedule(
-  convocationDate,
-  votingDates,
-  academicYear,
-  extraDisabledDates,
-  calculationMode,
-  duplicatesRemoved,
-  academicPresetApplied,
-) {
-  const firstVotingDate = votingDates[0];
-  const provisionalCensus = addBusinessDays(convocationDate, 1, extraDisabledDates);
-  const censusPublicationEnd = addBusinessDays(provisionalCensus, 4, extraDisabledDates);
-  const censusClaimEnd = addBusinessDays(censusPublicationEnd, 3, extraDisabledDates);
-  const definitiveCensus = addBusinessDays(
-    censusClaimEnd,
-    calculationMode === "minimum" ? 1 : 3,
-    extraDisabledDates,
-  );
-  const earliestVotingDate = addBusinessDays(definitiveCensus, 1, extraDisabledDates);
-  const resultsClaimEntries = buildResultsClaimEntries(votingDates, extraDisabledDates);
-  const finalProclamationEntries = buildFinalProclamationEntries(resultsClaimEntries, extraDisabledDates, calculationMode);
-
-  const errors = [];
-
-  if (firstVotingDate < earliestVotingDate) {
-    errors.push(
-      `La primera votación debe celebrarse al menos un día hábil después de la resolución de reclamaciones y publicación del censo definitivo.${formatFirstValidVotingDateMessage(earliestVotingDate)}`,
-    );
-  }
-
-  if (errors.length > 0) {
-    return { valid: false, errors };
-  }
-
+function buildGroupSchedule({ convocationDate, votingDates, academicYear, days, calculationMode, duplicatesRemoved, plan }) {
+  const { provisionalCensus, censusClaimStart, censusPublicationEnd, censusClaimEnd, definitiveCensus } = plan;
   return {
     valid: true,
     type: "group",
@@ -850,7 +602,6 @@ function buildGroupSchedule(
       calculationMode,
       multipleVotingDates: votingDates.length > 1,
       duplicatesRemoved,
-      academicPresetApplied,
     }),
     events: [
       singleDayEvent(
@@ -878,7 +629,7 @@ function buildGroupSchedule(
       rangeEvent(
         "census_claim_period",
         "Plazo de reclamaciones de los censos provisionales",
-        provisionalCensus,
+        censusClaimStart,
         censusClaimEnd,
         "Periodo de reclamación al censo.",
         "Censo",
@@ -891,120 +642,23 @@ function buildGroupSchedule(
         "Censo",
       ),
       unitaryActEvent(votingDates),
-      buildResultsClaimEvent(resultsClaimEntries),
-      buildFinalProclamationEvent(finalProclamationEntries),
+      ...studentElectionResults("group", votingDates, days, calculationMode),
     ],
   };
 }
 
-function rangeEndFromBusinessLength(startDate, businessDays, extraDisabledDates) {
-  return addBusinessDays(startDate, businessDays - 1, extraDisabledDates);
-}
-
-function buildDepartmentSchedule({
-  convocationDate,
-  votingDates,
-  academicYear,
-  extraDisabledDates,
-  calculationMode,
-  duplicatesRemoved,
-  academicPresetApplied,
-}) {
-  const errors = [];
-
-  if (votingDates.length !== DEPARTMENT_VOTING_DATES) {
-    errors.push("Las elecciones a Consejo de Departamento requieren exactamente una fecha de votación.");
-  }
-
-  if (errors.length > 0) {
-    return { valid: false, errors };
-  }
-
-  const provisionalCensus = addBusinessDays(
-    convocationDate,
-    1,
-    extraDisabledDates,
-  );
-  const censusPublicationEnd = addBusinessDays(provisionalCensus, 4, extraDisabledDates);
-  const censusClaimEnd = addBusinessDays(censusPublicationEnd, 3, extraDisabledDates);
-  const definitiveCensus = addBusinessDays(
-    censusClaimEnd,
-    calculationMode === "minimum" ? 1 : 3,
-    extraDisabledDates,
-  );
-  const candidacySubmissionStart = definitiveCensus;
-  const candidacySubmissionEnd = rangeEndFromBusinessLength(
-    candidacySubmissionStart,
-    calculationMode === "minimum" ? 3 : 7,
-    extraDisabledDates,
-  );
-  const provisionalCandidatures = addBusinessDays(
-    candidacySubmissionEnd,
-    calculationMode === "minimum" ? 1 : 3,
-    extraDisabledDates,
-  );
-  const candidacyClaimEnd = rangeEndFromBusinessLength(
-    provisionalCandidatures,
-    calculationMode === "minimum" ? 3 : 7,
-    extraDisabledDates,
-  );
-  const candidacyClaimsResolution = addBusinessDays(
-    candidacyClaimEnd,
-    calculationMode === "minimum" ? 1 : 2,
-    extraDisabledDates,
-  );
-  const definitiveCandidatures = addBusinessDays(
-    candidacyClaimsResolution,
-    calculationMode === "minimum" ? 1 : 3,
-    extraDisabledDates,
-  );
-
+function buildDepartmentSchedule({ convocationDate, votingDates, academicYear, days, calculationMode, duplicatesRemoved, plan }) {
+  const { provisionalCensus, censusPublicationEnd, censusClaimStart, censusClaimEnd, definitiveCensus,
+    candidacySubmissionStart, candidacySubmissionEnd, provisionalCandidatures, candidacyClaimStart,
+    candidacyClaimEnd, candidacyClaimsResolution, definitiveCandidatures, campaign } = plan;
   const votingDate = votingDates[0];
-  const minimumVotingDateForAppointments = addBusinessDays(definitiveCandidatures, 5, extraDisabledDates);
-  const campaignEnd = addBusinessDays(votingDate, -1, extraDisabledDates);
-  const earlyVotingStart = addBusinessDays(definitiveCandidatures, 2, extraDisabledDates);
-  const earlyVotingEnd = addBusinessDays(votingDate, -1, extraDisabledDates);
-  const mesaAppointment = addBusinessDays(votingDate, -4, extraDisabledDates);
-  const interventorsAppointment = addBusinessDays(votingDate, -4, extraDisabledDates);
-  const provisionalElected = addBusinessDays(votingDate, 1, extraDisabledDates);
-  const resultsClaimStart = addBusinessDays(provisionalElected, 1, extraDisabledDates);
-  const resultsClaimEnd = addBusinessDays(provisionalElected, 3, extraDisabledDates);
-  const finalElectedProclamation = addBusinessDays(
-    resultsClaimEnd,
-    calculationMode === "minimum" ? 1 : 2,
-    extraDisabledDates,
-  );
-
-  if (votingDate <= definitiveCandidatures) {
-    errors.push("La votación debe celebrarse después de la proclamación definitiva de candidaturas.");
-  }
-
-  if (votingDate < minimumVotingDateForAppointments) {
-    errors.push(
-      `La votación y escrutinio debe fijarse al menos 5 días hábiles después de la proclamación definitiva de candidaturas para que el nombramiento de mesa e interventores sea posterior. La primera fecha válida es el ${formatDateInput(minimumVotingDateForAppointments)}.`,
-    );
-  }
-
-  if (campaignEnd < definitiveCandidatures) {
-    errors.push("No hay margen suficiente entre la proclamación definitiva de candidaturas y la votación para fijar la campaña electoral.");
-  } else {
-    const campaignBusinessDays = countBusinessDaysInclusive(definitiveCandidatures, campaignEnd, extraDisabledDates);
-    const campaignNaturalDays = countCalendarDaysInclusive(definitiveCandidatures, campaignEnd);
-    if (campaignBusinessDays < 3) {
-      errors.push("Entre la proclamación definitiva de candidaturas y la votación deben quedar al menos 3 días hábiles de campaña electoral.");
-    }
-    if (campaignNaturalDays > 15) {
-      errors.push("La campaña electoral no puede superar 15 días naturales antes de la votación.");
-    }
-  }
-
-  if (earlyVotingStart > earlyVotingEnd) {
-    errors.push("No hay margen suficiente entre la proclamación definitiva de candidaturas y la votación para abrir el voto anticipado.");
-  }
-
-  if (errors.length > 0) {
-    return { valid: false, errors };
-  }
+  const earlyVotingEnd = addBusinessDays(votingDate, -1, days.electoral);
+  const earlyVotingStart = addBusinessDays(definitiveCandidatures, 2, days.electoral);
+  const appointment = addBusinessDays(votingDate, -4, days.electoral);
+  const preferredEnd = calculationMode === "minimum" ? campaign.minimumEnd : campaign.maximumEnd;
+  const campaignEnd = preferredEnd < earlyVotingEnd ? preferredEnd : earlyVotingEnd;
+  const { provisional: provisionalElected, start: resultsClaimStart, end: resultsClaimEnd,
+    final: finalElectedProclamation } = resultDeadlines("department", votingDate, days, calculationMode);
 
   return {
     valid: true,
@@ -1014,7 +668,6 @@ function buildDepartmentSchedule({
     assumptions: buildAssumptions({
       calculationMode,
       duplicatesRemoved,
-      academicPresetApplied,
     }),
     events: [
       singleDayEvent(
@@ -1042,7 +695,7 @@ function buildDepartmentSchedule({
       rangeEvent(
         "census_claim_period",
         "Plazo de reclamación a los censos provisionales",
-        provisionalCensus,
+        censusClaimStart,
         censusClaimEnd,
         "Incluye la publicación del censo y los tres días hábiles posteriores.",
         "Censo",
@@ -1072,7 +725,7 @@ function buildDepartmentSchedule({
       rangeEvent(
         "candidacy_claim_period",
         "Plazo en que se mantendrán publicadas las candidaturas presentadas y de reclamación a las mismas",
-        provisionalCandidatures,
+        candidacyClaimStart,
         candidacyClaimEnd,
         "Periodo conjunto de publicación y reclamación a candidaturas.",
         "Candidaturas",
@@ -1094,7 +747,7 @@ function buildDepartmentSchedule({
       rangeEvent(
         "campaign_electoral",
         "Campaña electoral",
-        definitiveCandidatures,
+        campaign.start,
         campaignEnd,
         "Periodo de campaña previo a la votación.",
         "Campaña",
@@ -1110,14 +763,14 @@ function buildDepartmentSchedule({
       singleDayEvent(
         "mesa_appointment",
         "Nombramiento de la Mesa Electoral",
-        mesaAppointment,
+        appointment,
         "Nombramiento por sorteo al menos 4 días hábiles antes de la votación.",
         "Preparación de votación",
       ),
       singleDayEvent(
         "interventors_appointment",
         "Nombramiento de Interventores",
-        interventorsAppointment,
+        appointment,
         "Fecha límite para la solicitud de interventores con 4 días hábiles de antelación.",
         "Preparación de votación",
       ),
@@ -1154,12 +807,46 @@ function buildDepartmentSchedule({
   };
 }
 
+// Las plantillas PDF y la web deben mostrar cuándo se reanuda cada plazo de participación.
+function showInterruptedPeriods(schedule, days) {
+  const participantRanges = new Set(["census_claim_period", "candidacy_submission_period", "candidacy_claim_period",
+    "campaign_electoral", "early_voting", "results_claim_period"]);
+  for (const event of schedule.events) {
+    if (!participantRanges.has(event.id)) continue;
+    for (const entry of event.entries ?? [event]) {
+      const blocks = [];
+      let active = null;
+      for (let date = entry.startDate; date <= entry.endDate; date = dayAfter(date)) {
+        const key = isoDate(date);
+        if (vacations.has(key) || exams.has(key) || (event.id === "campaign_electoral" && days.electoral.has(key))) {
+          active = null;
+        } else if (isBusinessDay(date, days.electoral)) {
+          if (!active) {
+            active = { start: date, end: date };
+            blocks.push(active);
+          }
+          active.end = date;
+        }
+      }
+      if (blocks.length < 2) continue;
+      entry.segments = blocks;
+      entry.webValue = blocks.map(({start, end}) => formatRangeLong(start, end)).join(" · ");
+      const labels = blocks.map(({start, end}) => formatRangeCompact(start, end));
+      entry.pdfValue = event.entries ? labels.join(" / ") : labels;
+    }
+    if (event.entries) {
+      event.pdfBlocks = event.entries.map(entry => ({ primary: entry.pdfValue, secondary: entry.referenceLabel }));
+      event.pdfValue = event.pdfBlocks.map(block => `${block.primary} ${block.secondary}`);
+    }
+  }
+  return schedule;
+}
+
 export function calculateSchedule({
   type,
   convocationDate: convocationInput,
   electionDate: legacyElectionInput,
   electionDatesInput = [],
-  academicYear: academicYearInput,
   calculationMode = "maximum",
   excludedDatesInput = [],
 }) {
@@ -1195,90 +882,49 @@ export function calculateSchedule({
     errors.push(`Hay fechas de votación no válidas: ${votingDates.invalid.join(", ")}.`);
   }
 
-  const anchorDate = votingDates.dates.at(-1) ?? convocationDate;
-  const academicYear = academicYearInput?.trim() || (anchorDate ? suggestAcademicYear(anchorDate) : "");
-  const academicNonTeachingDates = getAcademicNonTeachingDates(academicYear);
-  const excludedDates = parseExcludedDates(excludedDatesInput);
-  const disabledDates = mergeDisabledDateSets(excludedDates.set, academicNonTeachingDates.set);
-
-  if (excludedDates.invalid.length > 0) {
-    errors.push(`Hay fechas inhábiles adicionales no válidas: ${excludedDates.invalid.join(", ")}.`);
+  if (type === "department" && votingDates.dates.length > DEPARTMENT_VOTING_DATES) {
+    errors.push("Las elecciones a Consejo de Departamento requieren exactamente una fecha de votación.");
   }
-
-  if (academicNonTeachingDates.invalid.length > 0) {
-    errors.push(`Hay periodos no lectivos precargados no válidos para ${academicYear}: ${academicNonTeachingDates.invalid.join(", ")}.`);
-  }
-
-  if (convocationDate && !isBusinessDay(convocationDate, disabledDates)) {
-    errors.push("La convocatoria debe situarse en un día hábil según el cómputo configurado.");
-  }
-
-  for (const votingDate of votingDates.dates) {
-    if (!isBusinessDay(votingDate, disabledDates)) {
-      const firstValidVotingDate = convocationDate && CALENDAR_TYPES[type]
-        ? getFirstValidVotingDate({
-          type,
-          convocationDate,
-          requestedDate: votingDate,
-          extraDisabledDates: disabledDates,
-          calculationMode: normalizedCalculationMode,
-        })
-        : null;
-      const helpMessage = firstValidVotingDate ? formatFirstValidVotingDateMessage(firstValidVotingDate) : "";
-      errors.push(`La votación del ${formatDateInput(votingDate)} debe situarse en un día hábil según el cómputo configurado.${helpMessage}`);
+  const days = getCalendarDays(excludedDatesInput);
+  if (days.invalid.length) errors.push(`Hay fechas inhábiles adicionales no válidas: ${days.invalid.join(", ")}.`);
+  if (convocationDate) {
+    const year = suggestAcademicYear(convocationDate);
+    if (!academicCalendars[year]) {
+      errors.push(`Calendario oficial pendiente para el curso ${year}.`);
+    } else if (!isBusinessDay(convocationDate, days.electoral)) {
+      errors.push("La convocatoria debe situarse en un día hábil electoral fuera de exámenes y vacaciones.");
     }
   }
+  if (errors.length) return { valid: false, errors };
 
-  const firstVotingDate = votingDates.dates[0];
-  if (convocationDate && firstVotingDate && firstVotingDate <= convocationDate) {
-    const firstValidVotingDate = CALENDAR_TYPES[type]
-      ? getFirstValidVotingDate({
-        type,
-        convocationDate,
-        extraDisabledDates: disabledDates,
-        calculationMode: normalizedCalculationMode,
-      })
-      : null;
-    const helpMessage = firstValidVotingDate ? formatFirstValidVotingDateMessage(firstValidVotingDate) : "";
-    errors.push(`La primera votación debe celebrarse al menos un día hábil después de la convocatoria.${helpMessage}`);
+  const academicYear = suggestAcademicYear(convocationDate);
+  const pending = (year) => ({ valid: false, errors: [`Calendario oficial pendiente para el curso ${year}.`] });
+  const latest = votingDates.dates.at(-1);
+  const missing = missingAcademicYear(convocationDate, latest > convocationDate ? latest : convocationDate);
+  if (missing) return pending(missing);
+
+  const plan = prepareElection(type, convocationDate, days, normalizedCalculationMode);
+  for (const vote of votingDates.dates) {
+    const candidate = vote < plan.firstVote ? plan.firstVote : nextBusinessDayOnOrAfter(vote, days.electoral);
+    const { final } = resultDeadlines(type, candidate, days, normalizedCalculationMode);
+    const uncovered = missingAcademicYear(convocationDate, final);
+    if (uncovered) return pending(uncovered);
+    const help = formatFirstValidVotingDateMessage(candidate);
+    if (!isBusinessDay(vote, days.electoral)) {
+      const reason = exams.has(isoDate(vote)) ? "coincide con el periodo oficial de exámenes" : "es inhábil";
+      errors.push(`La votación del ${formatDateInput(vote)} ${reason}.${help}`);
+    } else if (vote < plan.firstVote) {
+      if (type === "department") {
+        errors.push(`La campaña puede comenzar el ${formatDateInput(plan.campaign.start)}. Deben caber 3 días hábiles de campaña electoral y el nombramiento de la mesa e interventores con 4 días hábiles de antelación.${help}`);
+      } else {
+        const previous = type === "group" ? "la resolución de reclamaciones y publicación del censo definitivo" : "la convocatoria";
+        errors.push(`La primera votación debe celebrarse al menos un día hábil después de ${previous}.${help}`);
+      }
+    }
   }
-
-  if (errors.length > 0) {
-    return { valid: false, errors };
-  }
-  const academicPresetApplied = academicNonTeachingDates.supported && academicNonTeachingDates.invalid.length === 0;
-
-  if (type === "course") {
-    return buildCourseSchedule(
-      convocationDate,
-      votingDates.dates,
-      academicYear,
-      disabledDates,
-      normalizedCalculationMode,
-      votingDates.duplicatesRemoved,
-      academicPresetApplied,
-    );
-  }
-
-  if (type === "department") {
-    return buildDepartmentSchedule({
-      convocationDate,
-      votingDates: votingDates.dates,
-      academicYear,
-      extraDisabledDates: disabledDates,
-      calculationMode: normalizedCalculationMode,
-      duplicatesRemoved: votingDates.duplicatesRemoved,
-      academicPresetApplied,
-    });
-  }
-
-  return buildGroupSchedule(
-    convocationDate,
-    votingDates.dates,
-    academicYear,
-    disabledDates,
-    normalizedCalculationMode,
-    votingDates.duplicatesRemoved,
-    academicPresetApplied,
-  );
+  if (errors.length) return { valid: false, errors };
+  const options = { convocationDate, votingDates: votingDates.dates, academicYear, days, calculationMode,
+    duplicatesRemoved: votingDates.duplicatesRemoved, plan };
+  const builders = { course: buildCourseSchedule, group: buildGroupSchedule, department: buildDepartmentSchedule };
+  return showInterruptedPeriods(builders[type](options), days);
 }

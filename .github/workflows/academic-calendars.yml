@@ -1,0 +1,53 @@
+name: Revisar calendarios oficiales de la US
+
+on:
+  schedule:
+    - cron: "23 7 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: academic-calendars
+  cancel-in-progress: false
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Instalar lector de PDF
+        run: sudo apt-get update && sudo apt-get install -y poppler-utils
+      - name: Leer el índice y contrastar las publicaciones
+        run: python scripts/update_academic_calendars.py
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Comprobar la calculadora y el formulario con los datos propuestos
+        id: tests
+        continue-on-error: true
+        run: |
+          node --experimental-default-type=module tests/calculator.test.mjs
+          node --experimental-default-type=module tests/app.test.mjs
+      - name: Proponer la actualización para revisión
+        uses: peter-evans/create-pull-request@271a8d0340265f705b14b6d32b9829c1cb33d45e # v7.0.8
+        with:
+          branch: codex/actualizacion-calendario-us
+          add-paths: front/academic-calendars.json
+          commit-message: Actualizar los calendarios académicos publicados por la US
+          title: Actualización del calendario general de grado de la US
+          body: |
+            La US ha publicado o revisado un calendario académico.
+            Contrasta las fechas de grado del archivo con el PDF enlazado en cada curso.
+            Al aprobar y fusionar esta propuesta, GitHub Pages publicará los datos revisados.
+          delete-branch: true
+      - name: Señalar si la revisión requiere adaptar las pruebas
+        if: steps.tests.outcome == 'failure'
+        run: exit 1

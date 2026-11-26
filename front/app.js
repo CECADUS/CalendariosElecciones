@@ -1,5 +1,6 @@
 ﻿import {
-  ACADEMIC_NON_TEACHING_PERIODS,
+  academicCalendars,
+  getCalendarDays,
   CALENDAR_TYPES,
   MAX_VOTING_DATES,
   calculateSchedule,
@@ -7,7 +8,6 @@
   formatDateLong,
   isBusinessDay,
   parseDateInput,
-  parseExcludedDates,
   suggestNextVotingDate,
   suggestAcademicYear,
 } from "./calculator.js";
@@ -16,6 +16,7 @@ import { downloadFilledPdf } from "./pdf-generator.js";
 const form = document.querySelector("[data-calendar-form]");
 const typeInput = document.querySelector("#calendar-type");
 const academicYearInput = document.querySelector("#academic-year");
+const calendarSource = document.querySelector("[data-calendar-source]");
 const calculationModeInput = document.querySelector("#calculation-mode");
 const convocationInput = document.querySelector("#convocation-date");
 const convocationNative = document.querySelector('[data-native-picker="convocation"]');
@@ -254,27 +255,15 @@ function buildExcludedDatesInput() {
   }));
 }
 
-function resolveAcademicYear(entries = votingEntries) {
-  const typedAcademicYear = academicYearInput.value.trim();
-  if (typedAcademicYear) {
-    return typedAcademicYear;
-  }
-
-  const latestVotingDate = [...entries]
-    .map((entry) => parseDateInput(entry.value))
-    .filter(Boolean)
-    .at(-1);
-  const convocationDate = parseDateInput(convocationInput.value);
-  const fallbackDate = latestVotingDate ?? convocationDate ?? nextBusinessDay(new Date());
-  return suggestAcademicYear(fallbackDate);
-}
-
-function buildDisabledDates(entries = votingEntries) {
-  const excludedDates = parseExcludedDates(buildExcludedDatesInput());
-  const academicYear = resolveAcademicYear(entries);
-  const academicRanges = ACADEMIC_NON_TEACHING_PERIODS[academicYear] ?? [];
-  const academicDates = parseExcludedDates(academicRanges);
-  return new Set([...excludedDates.set, ...academicDates.set]);
+function showAcademicCalendar() {
+  const convocation = parseDateInput(convocationInput.value);
+  const year = convocation ? suggestAcademicYear(convocation) : "";
+  academicYearInput.value = year;
+  const calendar = academicCalendars[year];
+  calendarSource.href = calendar?.source ?? "https://www.us.es/calendario-academico";
+  calendarSource.textContent = calendar ? `Calendario general de grado US · ${year}` : year
+    ? `Calendario oficial pendiente para ${year}` : "Calendarios académicos de la US";
+  calculateButton.disabled = Boolean(year && !calendar);
 }
 
 function getSuggestedVotingValue(entries = votingEntries) {
@@ -282,7 +271,6 @@ function getSuggestedVotingValue(entries = votingEntries) {
     type: typeInput.value,
     convocationDate: convocationInput.value,
     electionDatesInput: entries.map((entry) => entry.value),
-    academicYear: academicYearInput.value,
     calculationMode: calculationModeInput.value,
     excludedDatesInput: buildExcludedDatesInput(),
   });
@@ -304,7 +292,7 @@ function normalizeVotingEntriesForCurrentType({ enforceBusinessDays = true, forc
     return true;
   }
 
-  const disabledDates = buildDisabledDates(votingEntries);
+  const disabledDates = getCalendarDays(buildExcludedDatesInput()).electoral;
   const normalizedEntries = [];
 
   for (const [index, entry] of votingEntries.entries()) {
@@ -329,7 +317,11 @@ function normalizeVotingEntriesForCurrentType({ enforceBusinessDays = true, forc
 }
 
 function seedFormValues() {
-  const baseDate = nextBusinessDay(new Date());
+  let baseDate = nextBusinessDay(new Date());
+  const { electoral } = getCalendarDays();
+  while (academicCalendars[suggestAcademicYear(baseDate)] && !isBusinessDay(baseDate, electoral)) {
+    baseDate.setDate(baseDate.getDate() + 1);
+  }
 
   votingCounter = 0;
   excludedCounter = 0;
@@ -337,11 +329,9 @@ function seedFormValues() {
   calculationModeInput.value = "minimum";
   convocationInput.value = formatDateInput(baseDate);
   convocationNative.value = toIso(convocationInput.value);
-  academicYearInput.value = suggestAcademicYear(baseDate);
+  showAcademicCalendar();
   excludedEntries = [];
   const firstVotingValue = getSuggestedVotingValue([]);
-  const firstVotingDate = parseDateInput(firstVotingValue);
-  academicYearInput.value = suggestAcademicYear(firstVotingDate ?? baseDate);
   votingEntries = [createVotingEntry(firstVotingValue)];
   syncDepartmentFields();
   renderVotingEntries();
@@ -414,7 +404,7 @@ function renderLinkedRangeEntries(event) {
     <div class="multi-date-grid">
       ${event.entries.map((entry) => `
         <div class="date-pill">
-          <strong>${formatDateInput(entry.startDate)} - ${formatDateInput(entry.endDate)}</strong>
+          <strong>${entry.segments ? entry.webValue : `${formatDateInput(entry.startDate)} - ${formatDateInput(entry.endDate)}`}</strong>
           <span class="date-pill-meta">${entry.referenceLabel}</span>
         </div>
       `).join("")}
@@ -437,6 +427,11 @@ function renderLinkedSingleEntries(event) {
 }
 
 function renderEventDate(event) {
+  if (event.segments) {
+    return event.segments.map(({ start, end }) =>
+      `<p class="event-date-caption">${formatDateInput(start)} – ${formatDateInput(end)}</p>`
+    ).join("");
+  }
   if (event.id === "unitary_act" && Array.isArray(event.dates) && event.dates.length > 1) {
     return `
       <div class="summary-chip">${event.webValue}</div>
@@ -509,7 +504,6 @@ function collectFormState() {
     type: typeInput.value,
     convocationDate: convocationInput.value,
     electionDatesInput: votingEntries.map((entry) => entry.value),
-    academicYear: academicYearInput.value,
     calculationMode: calculationModeInput.value,
     excludedDatesInput: buildExcludedDatesInput(),
   };
@@ -536,6 +530,7 @@ function performCalculation() {
 }
 
 function refreshMinimumVotingDate() {
+  showAcademicCalendar();
   if (calculationModeInput.value !== "minimum" || !parseDateInput(convocationInput.value)) {
     return;
   }
@@ -550,6 +545,7 @@ function bindStaticDateControl(textInput, nativeInput, pickerButtonSelector, onD
 
   textInput.addEventListener("input", () => {
     textInput.value = formatMaskedDate(textInput.value);
+    showAcademicCalendar();
     invalidateComputedState();
   });
 
@@ -761,7 +757,6 @@ typeInput.addEventListener("change", () => {
   syncDepartmentFields();
   invalidateComputedState();
 });
-academicYearInput.addEventListener("input", invalidateComputedState);
 calculationModeInput.addEventListener("change", () => {
   if (normalizeVotingEntriesForCurrentType({ forceFirstSuggested: true })) {
     renderVotingEntries();

@@ -47,9 +47,25 @@ Para activarlo en GitHub:
 2. En `Settings > Pages`, selecciona `GitHub Actions` como fuente de despliegue.
 3. Si GitHub sigue intentando construir `docs/` con Jekyll, la configuración antigua de Pages sigue activa y hay que cambiarla manualmente a `GitHub Actions`.
 
-## Días inhábiles del calendario académico
+## Calendario general de grado de la US
 
-La aplicación sigue calculando días inhábiles a partir de sábados, domingos y de los rangos que se introduzcan manualmente en la interfaz. Si se quieren precargar periodos no lectivos por curso académico, la extensión prevista está encapsulada en `front/calculator.js` dentro de `ACADEMIC_NON_TEACHING_PERIODS`.
+La fecha de convocatoria selecciona automáticamente el curso. Las fechas proceden de la columna «Caso general» de grado y de la relación de festivos y vacaciones de la Universidad de Sevilla. El formulario enlaza la publicación utilizada. Los días adicionales introducidos por la delegación se aplican a todos los trámites.
+
+Navidad, Semana Santa, Feria y verano se excluyen por completo. En los periodos generales de examen de primera y segunda convocatoria se pueden publicar censos, candidaturas y resultados, y resolver reclamaciones. Las presentaciones, el plazo para reclamar, la campaña y el voto cuentan días hábiles electorales. La tercera convocatoria sigue el régimen ordinario.
+
+En Consejo de Departamento, la campaña mínima se cierra al tercer día hábil. En máximos se amplía dentro del tramo disponible hasta quince días naturales. El voto anticipado tiene sus propios plazos. El formulario y el PDF indican los tramos efectivos cuando los exámenes o las vacaciones interrumpen la participación.
+
+### Actualización anual
+
+El catálogo revisado se guarda en [front/academic-calendars.json](front/academic-calendars.json). Cada lunes, el [flujo de actualización](.github/workflows/academic-calendars.yml) consulta el [índice oficial](https://www.us.es/calendario-academico), descarga los PDF anunciados y compara sus fechas y huellas SHA-256. Conserva los cursos históricos. Si hay cambios, prepara una solicitud de incorporación con los datos extraídos. La aprobación y fusión publica la actualización mediante el despliegue habitual. Para que el flujo pueda abrir esa solicitud, GitHub debe permitir que Actions cree pull requests en el repositorio.
+
+El cálculo usa la copia incluida en la web. Si falta un curso necesario, incluso para resolver reclamaciones después de la votación, se indica «Calendario oficial pendiente» y se espera a incorporar la publicación. Si la US modifica el formato del PDF y el importador no puede interpretar las tablas, el flujo señala el error y conserva la última copia revisada.
+
+El flujo también se puede lanzar desde Actions. Para ejecutar el importador en local se necesita Python 3.10 o posterior y `pdftotext` de Poppler en el PATH.
+
+```bash
+python scripts/update_academic_calendars.py
+```
 
 ## Referencias normativas
 

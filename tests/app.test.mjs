@@ -174,4 +174,22 @@ await runTest("actualiza la primera votacion y conserva las jornadas adicionales
     formatDateInput(addBusinessDays(parseDateInput(first), 1, new Set())));
 });
 
+await runTest("selecciona el curso por la convocatoria y comunica si está pendiente", async () => {
+  const find = await mount("department");
+  changeConvocation(find, "27/11/2026", "picker");
+  assert.equal(find("#academic-year").value, "2026-2027");
+  assert.match(find("[data-calendar-source]").href, /^https:\/\/www\.us\.es\//);
+  assert.equal(find('[data-voting-id="1"]').value, "02/02/2027");
+  find("[data-calculate]").dispatch("click");
+  assert.equal(find("[data-download]").disabled, false);
+
+  changeConvocation(find, "03/11/2099", "text");
+  assert.match(find("[data-calendar-source]").textContent, /Calendario oficial pendiente para 2099-2100/);
+  assert.equal(find("[data-calculate]").disabled, true);
+  assert.equal(find("[data-download]").disabled, true);
+  changeConvocation(find, "27/11/2026", "text");
+  assert.equal(find("[data-calculate]").disabled, false);
+  assert.equal(find('[data-voting-id="1"]').value, "02/02/2027");
+});
+
 if (failures) process.exitCode = 1;

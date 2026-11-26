@@ -5,6 +5,8 @@ import assert from "node:assert/strict";
 const {
   addBusinessDays,
   calculateSchedule,
+  getCalendarDays,
+  academicCalendars,
   countBusinessDaysInclusive,
   formatDateInput,
   parseDateInput,
@@ -64,7 +66,7 @@ runTest("calcula el calendario minimo de Consejo de Departamento", () => {
   assert.equal(asInput(eventById(schedule, "provisional_census_publication").startDate), "04/11/2025");
   assert.equal(eventById(schedule, "candidacy_submission_period").pdfValue, "14/11/25 al 18/11/25");
   assert.equal(asInput(eventById(schedule, "definitive_candidatures_proclamation").startDate), "25/11/2025");
-  assert.equal(eventById(schedule, "campaign_electoral").pdfValue, "25/11/25 al 01/12/25");
+  assert.equal(eventById(schedule, "campaign_electoral").pdfValue, "25/11/25 al 27/11/25");
   assert.equal(eventById(schedule, "early_voting").pdfValue, "27/11/25 al 01/12/25");
   assert.equal(asInput(eventById(schedule, "mesa_appointment").startDate), "26/11/2025");
   assert.equal(asInput(eventById(schedule, "provisional_elected_proclamation").startDate), "03/12/2025");
@@ -76,7 +78,7 @@ runTest("calcula el calendario maximo de Consejo de Departamento", () => {
   const schedule = calculateSchedule({
     type: "department",
     convocationDate: "04/12/2025",
-    electionDatesInput: ["30/01/2026"],
+    electionDatesInput: ["02/03/2026"],
     academicYear: "2025-2026",
     calculationMode: "maximum",
     excludedDatesInput: [],
@@ -84,21 +86,21 @@ runTest("calcula el calendario maximo de Consejo de Departamento", () => {
 
   assert.equal(schedule.valid, true);
   assert.equal(asInput(eventById(schedule, "provisional_census_publication").startDate), "05/12/2025");
-  assert.equal(eventById(schedule, "candidacy_submission_period").pdfValue, "22/12/25 al 30/12/25");
-  assert.equal(asInput(eventById(schedule, "definitive_candidatures_proclamation").startDate), "19/01/2026");
-  assert.equal(eventById(schedule, "campaign_electoral").pdfValue, "19/01/26 al 29/01/26");
-  assert.equal(eventById(schedule, "early_voting").pdfValue, "21/01/26 al 29/01/26");
-  assert.equal(asInput(eventById(schedule, "mesa_appointment").startDate), "23/01/2026");
-  assert.equal(asInput(eventById(schedule, "provisional_elected_proclamation").startDate), "02/02/2026");
-  assert.equal(eventById(schedule, "results_claim_period").pdfValue, "03/02/26 al 05/02/26");
-  assert.equal(asInput(eventById(schedule, "final_elected_proclamation").startDate), "09/02/2026");
+  assert.deepEqual(eventById(schedule, "candidacy_submission_period").pdfValue, ["07/01/26", "26/01/26 al 03/02/26"]);
+  assert.equal(asInput(eventById(schedule, "definitive_candidatures_proclamation").startDate), "23/02/2026");
+  assert.equal(eventById(schedule, "campaign_electoral").pdfValue, "23/02/26 al 27/02/26");
+  assert.equal(eventById(schedule, "early_voting").pdfValue, "25/02/26 al 27/02/26");
+  assert.equal(asInput(eventById(schedule, "mesa_appointment").startDate), "24/02/2026");
+  assert.equal(asInput(eventById(schedule, "provisional_elected_proclamation").startDate), "03/03/2026");
+  assert.equal(eventById(schedule, "results_claim_period").pdfValue, "04/03/26 al 06/03/26");
+  assert.equal(asInput(eventById(schedule, "final_elected_proclamation").startDate), "10/03/2026");
 });
 
 runTest("publica censos provisionales de Departamento al siguiente habil en minimos y maximos", () => {
   const minimum = calculateSchedule({
     type: "department",
     convocationDate: "04/12/2025",
-    electionDatesInput: ["09/01/2026"],
+    electionDatesInput: ["09/02/2026"],
     academicYear: "2025-2026",
     calculationMode: "minimum",
     excludedDatesInput: [],
@@ -106,7 +108,7 @@ runTest("publica censos provisionales de Departamento al siguiente habil en mini
   const maximum = calculateSchedule({
     type: "department",
     convocationDate: "04/12/2025",
-    electionDatesInput: ["30/01/2026"],
+    electionDatesInput: ["02/03/2026"],
     academicYear: "2025-2026",
     calculationMode: "maximum",
     excludedDatesInput: [],
@@ -144,7 +146,7 @@ runTest("rechaza una votacion sin margen minimo de campana", () => {
   assert.match(schedule.errors.join(" "), /3 d.as h.biles de campa.a electoral/i);
 });
 
-runTest("limita la campana a 15 dias naturales incluso con cambio horario", () => {
+runTest("cierra la campaña antes de Semana Santa y mantiene el voto anticipado por tramos", () => {
   const schedule = calculateSchedule({
     type: "department",
     convocationDate: "20/02/2026",
@@ -154,8 +156,9 @@ runTest("limita la campana a 15 dias naturales incluso con cambio horario", () =
     excludedDatesInput: [],
   });
 
-  assert.equal(schedule.valid, false);
-  assert.match(schedule.errors.join(" "), /no puede superar 15 d.as naturales/i);
+  assert.equal(schedule.valid, true);
+  assert.equal(eventById(schedule, "campaign_electoral").pdfValue, "16/03/26 al 18/03/26");
+  assert.deepEqual(eventById(schedule, "early_voting").pdfValue, ["18/03/26 al 27/03/26", "06/04/26 al 07/04/26"]);
 });
 
 runTest("sugiere la fecha minima de votacion para delegacion de curso", () => {
@@ -180,15 +183,8 @@ runTest("traslada al lunes laborable cuando una fiesta cae en domingo", () => {
   assert.equal(asInput(suggested), "14/10/2025");
 });
 
-runTest("considera Corpus Christi como no lectivo en el curso", () => {
-  const suggested = suggestNextVotingDate({
-    type: "course",
-    convocationDate: "03/06/2026",
-    academicYear: "2025-2026",
-    excludedDatesInput: [],
-  });
-
-  assert.equal(asInput(suggested), "05/06/2026");
+runTest("Corpus Christi bloquea también publicaciones y resoluciones", () => {
+  assert.ok(getCalendarDays().administrative.has("2026-06-04"));
 });
 
 runTest("considera Semana Santa como semana no lectiva completa", () => {
@@ -202,7 +198,7 @@ runTest("considera Semana Santa como semana no lectiva completa", () => {
   assert.equal(asInput(suggested), "06/04/2026");
 });
 
-runTest("mantiene el lunes del pescaíto como lectivo", () => {
+runTest("incorpora la corrección oficial del lunes de Feria de 2026", () => {
   const suggested = suggestNextVotingDate({
     type: "course",
     convocationDate: "17/04/2026",
@@ -210,10 +206,10 @@ runTest("mantiene el lunes del pescaíto como lectivo", () => {
     excludedDatesInput: [],
   });
 
-  assert.equal(asInput(suggested), "20/04/2026");
+  assert.equal(asInput(suggested), "27/04/2026");
 });
 
-runTest("considera la Feria de Abril de Sevilla como no lectiva de martes a domingo", () => {
+runTest("no sugiere una votación para una convocatoria en vacaciones", () => {
   const suggested = suggestNextVotingDate({
     type: "course",
     convocationDate: "20/04/2026",
@@ -221,18 +217,18 @@ runTest("considera la Feria de Abril de Sevilla como no lectiva de martes a domi
     excludedDatesInput: [],
   });
 
-  assert.equal(asInput(suggested), "27/04/2026");
+  assert.equal(suggested, null);
 });
 
-runTest("adelanta la Feria si la regla tradicional la deja integramente en mayo", () => {
+runTest("usa las fechas publicadas aunque la Feria empiece en mayo", () => {
   const suggested = suggestNextVotingDate({
     type: "course",
-    convocationDate: "28/04/2025",
+    convocationDate: "02/05/2025",
     academicYear: "2024-2025",
     excludedDatesInput: [],
   });
 
-  assert.equal(asInput(suggested), "05/05/2025");
+  assert.equal(asInput(suggested), "12/05/2025");
 });
 
 runTest("desplaza la sugerencia de curso si la fecha minima es inhabil", () => {
@@ -490,6 +486,55 @@ runTest("genera nombres de descarga en espanol", () => {
     buildDownloadFilename({ type: "department", academicYear: "2025-2026" }),
     "calendario-electoral-departamento-2025-2026.pdf",
   );
+});
+
+runTest("convocatoria del 27 de noviembre: calcula todos los trámites y explica el 26 de enero", () => {
+  const input = { type: "department", convocationDate: "27/11/2026", calculationMode: "minimum" };
+  assert.equal(asInput(suggestNextVotingDate(input)), "02/02/2027");
+  const invalid = calculateSchedule({ ...input, electionDate: "26/01/2027" });
+  assert.equal(invalid.valid, false);
+  assert.match(invalid.errors.join(" "), /campaña puede comenzar el 26\/01\/2027.*02\/02\/2027/);
+  const schedule = calculateSchedule({ ...input, electionDate: "02/02/2027" });
+  assert.equal(schedule.valid, true);
+  assert.equal(eventById(schedule, "candidacy_claims_resolution").pdfValue, "08/01/27");
+  assert.equal(eventById(schedule, "definitive_candidatures_proclamation").pdfValue, "11/01/27");
+  assert.deepEqual(eventById(schedule, "campaign_electoral").pdfValue, ["26/01/27 al 27/01/27", "29/01/27"]);
+  assert.equal(eventById(schedule, "mesa_appointment").pdfValue, "26/01/27");
+});
+
+runTest("el máximo de quince naturales limita la campaña aunque la votación sea posterior", () => {
+  const schedule = calculateSchedule({ type: "department", convocationDate: "03/11/2025",
+    electionDate: "12/02/2026", calculationMode: "maximum" });
+  assert.equal(schedule.valid, true);
+  const campaign = eventById(schedule, "campaign_electoral");
+  const days = (campaign.endDate - campaign.startDate) / 86400000 + 1;
+  assert.ok(days >= 3 && days <= 15);
+  assert.ok(campaign.endDate < eventById(schedule, "early_voting").endDate);
+});
+
+runTest("Navidad, exámenes y tercera convocatoria usan los días que corresponden a cada trámite", () => {
+  const days = getCalendarDays();
+  for (const date of ["2026-12-21", "2027-01-06", "2027-04-12"]) assert.ok(days.administrative.has(date));
+  for (const date of ["2027-01-08", "2027-01-25", "2027-05-25", "2027-07-09"]) {
+    assert.equal(days.administrative.has(date), false);
+    assert.ok(days.electoral.has(date));
+  }
+  assert.equal(days.electoral.has("2026-10-15"), false);
+  assert.equal(days.electoral.has("2027-01-07"), false);
+});
+
+runTest("requiere cobertura oficial de todo el proceso, incluida la proclamación final", () => {
+  const lastYear = Number(Object.keys(academicCalendars).sort().at(-1).slice(5));
+  const unknown = { type: "course", convocationDate: `03/11/${lastYear}`, electionDate: `12/11/${lastYear}` };
+  assert.match(calculateSchedule(unknown).errors.join(" "), /Calendario oficial pendiente/);
+  assert.equal(suggestNextVotingDate(unknown), null);
+  const { electoral } = getCalendarDays();
+  const lastVotingDay = addBusinessDays(parseDateInput(`01/09/${lastYear}`), -1, electoral);
+  const convocationDate = asInput(addBusinessDays(lastVotingDay, -2, electoral));
+  const cross = { type: "course", convocationDate, electionDate: `15/09/${lastYear}` };
+  assert.match(calculateSchedule(cross).errors.join(" "), /Calendario oficial pendiente/);
+  const lateVote = { ...cross, electionDate: asInput(lastVotingDay) };
+  assert.match(calculateSchedule(lateVote).errors.join(" "), /Calendario oficial pendiente/);
 });
 
 if (failures > 0) {

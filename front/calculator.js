@@ -810,7 +810,7 @@ function buildDepartmentSchedule({ convocationDate, votingDates, academicYear, d
 // Las plantillas PDF y la web deben mostrar cuándo se reanuda cada plazo de participación.
 function showInterruptedPeriods(schedule, days) {
   const participantRanges = new Set(["census_claim_period", "candidacy_submission_period", "candidacy_claim_period",
-    "campaign_electoral", "early_voting", "results_claim_period"]);
+    "early_voting", "results_claim_period"]);
   for (const event of schedule.events) {
     if (!participantRanges.has(event.id)) continue;
     for (const entry of event.entries ?? [event]) {
@@ -818,7 +818,7 @@ function showInterruptedPeriods(schedule, days) {
       let active = null;
       for (let date = entry.startDate; date <= entry.endDate; date = dayAfter(date)) {
         const key = isoDate(date);
-        if (vacations.has(key) || exams.has(key) || (event.id === "campaign_electoral" && days.electoral.has(key))) {
+        if (vacations.has(key) || exams.has(key)) {
           active = null;
         } else if (isBusinessDay(date, days.electoral)) {
           if (!active) {

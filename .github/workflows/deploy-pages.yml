@@ -9,8 +9,6 @@ on:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 concurrency:
   group: github-pages
@@ -19,14 +17,16 @@ concurrency:
 jobs:
   validate:
     runs-on: ubuntu-latest
+    outputs:
+      artifact_id: ${{ steps.upload.outputs.artifact_id }}
     env:
       TZ: Europe/Madrid
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: 22
 
@@ -45,24 +45,43 @@ jobs:
             node --experimental-default-type=module "$test_file"
           done
 
+      - name: Upload tested site
+        id: upload
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: ./front
+          include-hidden-files: true
+
   deploy:
     needs: validate
     runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Configure GitHub Pages
-        uses: actions/configure-pages@v5
-
-      - name: Upload static site
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: ./front
+      - name: Wait for GitHub to list the uploaded Pages artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_ID: ${{ needs.validate.outputs.artifact_id }}
+        run: |
+          if [[ ! "$ARTIFACT_ID" =~ ^[0-9]+$ ]]; then
+            echo "::error::The upload did not return an artifact ID."
+            exit 1
+          fi
+          for delay in 0 2 4 8 16; do
+            sleep "$delay"
+            if listed_id=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts?name=github-pages" \
+              --jq '.artifacts[] | select(.expired == false) | .id') && [[ "$listed_id" == "$ARTIFACT_ID" ]]; then
+              exit 0
+            fi
+          done
+          echo "::error::GitHub did not list github-pages with ID $ARTIFACT_ID for run $GITHUB_RUN_ID."
+          exit 1
 
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5

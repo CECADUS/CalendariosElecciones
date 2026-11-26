@@ -498,7 +498,10 @@ runTest("convocatoria del 27 de noviembre: calcula todos los trámites y explica
   assert.equal(schedule.valid, true);
   assert.equal(eventById(schedule, "candidacy_claims_resolution").pdfValue, "08/01/27");
   assert.equal(eventById(schedule, "definitive_candidatures_proclamation").pdfValue, "11/01/27");
-  assert.deepEqual(eventById(schedule, "campaign_electoral").pdfValue, ["26/01/27 al 27/01/27", "29/01/27"]);
+  const campaign = eventById(schedule, "campaign_electoral");
+  assert.equal(campaign.pdfValue, "26/01/27 al 29/01/27");
+  assert.equal(campaign.segments, undefined);
+  assert.equal(countBusinessDaysInclusive(campaign.startDate, campaign.endDate, getCalendarDays().electoral), 3);
   assert.equal(eventById(schedule, "mesa_appointment").pdfValue, "26/01/27");
 });
 
